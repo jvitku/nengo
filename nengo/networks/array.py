@@ -1,47 +1,45 @@
-import nef
-from ca.nengo.ui.configurable import *
-from javax.swing import *
-from javax.swing.event import DocumentListener
-
-title='Network Array'
-label='Network\nArray'
-icon='array.png'
-
-description="""<html>This template enables constructing subnetworks full D (# of dimensions) independent populations of neurons.  These are faster to construct but cannot compute all the same nonlinear functions as a single large population with D dimensions.</html>"""
-
-params=[
-    ('name','Name',str, 'Name of the Network Array'),
-    ('neurons','Neurons per dimension',int,'Number of neurons in each of the ensembles'),
-    ('length','Number of dimensions',int,'Number of ensembles in the array'),
-    ('radius','Radius',float,'Maximum magnitude of vector that can be represented in each ensemble'),
-    ('iLow','Intercept (low)',float,'Smallest value for neurons to start firing at (between -1 and 1)'),
-    ('iHigh','Intercept (high)',float,'Largest value for neurons to start firing at (between -1 and 1)'),
-    ('rLow','Max rate (low) [Hz]',float,'Smallest maximum firing rate for neurons in the ensemble'),
-    ('rHigh','Max rate (high) [Hz]',float,'Largest maximum firing rate for neurons in the ensemble'),
-    ('encSign','Encoding sign', PTemplateSign,'Limits the sign of the encoders'),
-    ('useQuick', 'Quick mode', bool,'Uses the exact same encoders and decoders for each ensemble in the array'),
-    ]
-
 
 from ..nef import Model
 
 def make(network, name, ensembles, neurons, dimensions, **ensemble_params):
-         # radius=1.0, rLow=200, rHigh=400, iLow=-1, iHigh=1, encSign=0, useQuick=True):
-    network = Model.get(network)
+    """Construct a network containing an array of ensembles.
 
-    check_parameters(network)
+    This template enables constructing networks full D (# of dimensions)
+    independent populations of neurons.  These are faster to construct but
+    cannot compute all the same nonlinear functions as a single large
+    population with D dimensions.
 
-    if encSign!=0:
-        ensemble = net.make_array(name, neurons, length, max_rate=(rLow,rHigh), intercept=(iLow, iHigh), radius=radius, encoders=[[encSign]], quick=useQuick)
+    :param network: Parent network for the array
+    :type network: str
+    :param name: Name of the network array
+    :type name: str
+    :param ensembles: Number of ensembles in the array
+    :type ensembles: int
+    :param dimensions: Number of dimensions in each of the ensembles
+    :type dimensions: int
+    :param ensemble_params: Dictionary of additional parameters for the ensemble
+    :type ensemble_params: dict
+    """
+
+    parent_net = check_parameters(network, name, ensembles, neurons, dimensions, **ensemble_params)
+
+    net = parent_net.make_network(name)
+    for i in xrange(ensembles):
+        net.make_ensemble(str(i), neurons, dimensions, **ensemble_params)
+
+    return net
+
+def check_parameters(network, name, neurons, dimensions, ensemble_params):
+    if isinstance(network, str):
+        net = Model.get(network, None)
+        if net is None:
+            raise ValueError("The network \"%s\" does not exist" % network)
     else:
-        ensemble = net.make_array(name, neurons, length, max_rate=(rLow,rHigh), intercept=(iLow, iHigh), radius=radius, quick=useQuick)
+        net = network
+    if not isinstance(network, Network):
+        raise valueError("\"network\" is not a Network object")
+    if network.get(name, None) is not None:
+        raise ValueError("The name \"%s\" is already taken in the network \"%s\"" % (name, network.name))
 
-def check_parameters(network):
-    try:
-       net.network.getNode(p['name'])
-       return 'That name is already taken'
-    except:
-        pass
-    if p['iLow'] > p['iHigh']: return 'Low intercept must be less than high intercept'
-    if p['rLow'] > p['rHigh']: return 'Low max firing rate must be less than high max firing rate'
+    return net
 
