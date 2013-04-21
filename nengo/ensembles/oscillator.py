@@ -29,12 +29,13 @@ def make(network, name, neurons=100, dimensions=2, frequency=5,
 
     frequency = frequency*2*math.pi;
     if (controlled):
-        oscillator=net.make(name, neurons, dimensions=3)
+        oscillator = net.make(name, neurons, dimensions=3)
         A = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
-        connection = net.connect(oscillator, oscillator, A, func=feedback, pstc=tau_feedback)
+        connection = net.connect(oscillator, oscillator, feedback, A, 
+                                 pstc=tau_feedback)
              
     else:
-        oscillator=net.make(name, neurons, dimensions=2)
+        oscillator = net.make(name, neurons, dimensions=2)
         A = [[1, -frequency*tau_feedback], [frequency*tau_feedback, 1]]
         connection = net.connect(oscillator, oscillator, A, pstc=tau_feedback)
     
