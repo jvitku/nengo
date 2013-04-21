@@ -17,11 +17,12 @@ def make(network, name, ensembles, neurons, dimensions, **ensemble_params):
     :type ensembles: int
     :param dimensions: Number of dimensions in each of the ensembles
     :type dimensions: int
-    :param ensemble_params: Dictionary of additional parameters for the ensemble
+    :param ensemble_params: Dictionary of parameters for the ensembles
     :type ensemble_params: dict
     """
 
-    parent_net = check_parameters(network, name, ensembles, neurons, dimensions, **ensemble_params)
+    parent_net = check_parameters(
+        network, name, ensembles, neurons, dimensions, **ensemble_params)
 
     net = parent_net.make_network(name)
     for i in xrange(ensembles):
@@ -39,7 +40,9 @@ def check_parameters(network, name, neurons, dimensions, ensemble_params):
     if not isinstance(network, Network):
         raise valueError("\"network\" is not a Network object")
     if network.get(name, None) is not None:
-        raise ValueError("The name \"%s\" is already taken in the network \"%s\"" % (name, network.name))
+        raise ValueError(
+            "The name \"%s\" is already taken in the network \"%s\""
+            % (name, network.name))
 
     return net
 
