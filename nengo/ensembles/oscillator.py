@@ -14,23 +14,38 @@ params=[
     ('controlled', 'Frequency control', bool,'If checked will build a frequency controlled oscillator (a nonlinear system)'),
     ]
 
-def test_params(net,p):
-    try:
-       net.network.getNode(p['name'])
-       return 'That name is already taken'
-    except:
-        pass
-    if p['neurons']<1: return 'Must have a positive number of neurons'
-    if p['frequency']<1: return 'Must have a positive frequency'
-    
+
 import numeric
 def feedback(x):
     return x[0]+x[2]*x[1], x[1]-x[2]*x[0], 0
     
 from java.util import ArrayList
-from java.util import HashMap
-def make(net, name='Oscillator', neurons=100, dimensions=2, frequency = 5, tau_feedback=0.1, tau_input=0.01, scale=1, controlled = False):
-    frequency = frequency*2*numeric.pi;
+
+def make(network, name='Oscillator', neurons=100, dimensions=2, frequency=5, 
+         tau_feedback=0.1, tau_input=0.01, scale=1, controlled=False):
+        """The oscillator needs an input (2D), which can be used to start it 
+        off from rest.  Once it has started, the input can be set to zero. 
+        The controlled oscillator also needs a 1D control input that changes 
+        the frequency (and direction) of the oscillation. 
+        http://nengo.ca/docs/html/demos/oscillator.html Tips & tricks.
+    
+    :param str name:
+        Name of the integrator
+    :param int neurons:
+        Number of neurons in the integrator
+    :param int dimensions:
+        Number of dimensions for the integrator
+    :param float tau_feedback:
+         Post-synaptic time constant of the integrative feedback, 
+         in seconds (longer -> slower change but better value retention)
+    :param float tau_input:
+        Post-synaptic time constant of the integrator input, in seconds 
+        (longer -> more input filtering)
+    :param float scale:
+        A scaling value for the input (controls the rate of integration)
+    """
+    
+    frequency = frequency*2*math.pi;
     if (controlled):
         oscillator=net.make(name,neurons,dimensions=3)
         A = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
@@ -72,3 +87,13 @@ def make(net, name='Oscillator', neurons=100, dimensions=2, frequency = 5, tau_f
         net.network.setMetaData("templateProjections", HashMap())
     templateproj = net.network.getMetaData("templateProjections")
     templateproj.put(name, name)
+    
+def check_parameters(net,p):
+    try:
+       net.network.getNode(p['name'])
+       return 'That name is already taken'
+    except:
+        pass
+    if p['neurons']<1: return 'Must have a positive number of neurons'
+    if p['frequency']<1: return 'Must have a positive frequency'
+    
