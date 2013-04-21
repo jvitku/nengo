@@ -1,27 +1,36 @@
-title='Integrator'
-label='Integrator'
-icon='integrator.png'
 
-description="""<html>This constructs an integrator of the specified number of dimensions. It requires an input of that number of dimensions after construction.</html>"""
 
-params=[
-    ('name','Name',str,'Name of the integrator'),
-    ('neurons','Number of neurons',int,'Number of neurons in the integrator'),
-    ('dimensions','Number of dimensions',int,'Number of dimensions for the integrator'),
-    ('tau_feedback','Feedback PSTC [s]',float,'Post-synaptic time constant of the integrative feedback, in seconds (longer -> slower change but better value retention)'),
-    ('tau_input','Input PSTC [s]',float,'Post-synaptic time constant of the integrator input, in seconds (longer -> more input filtering)'),
-    ('scale','Scaling factor',float,'A scaling value for the input (controls the rate of integration)'),
-    ]
+
     
 import numeric
 from java.util import ArrayList
 from java.util import HashMap
 
-def make(network, name='Integrator', neurons=100, dimensions=1, tau_feedback=0.1, tau_input=0.01, scale=1):
-    net = check_parameters(network, name, neurons, dimensions, tau_feedback, tau_input, scale)
+def make(network, name='Integrator', neurons=100, dimensions=1, 
+         tau_feedback=0.1, tau_input=0.01, scale=1):
+    """This constructs an integrator of the specified number of dimensions. 
+    It requires an input of that number of dimensions after construction.
+    
+    :param str name:
+        Name of the integrator
+    :param int neurons:
+        Number of neurons in the integrator
+    :param int dimensions:
+        Number of dimensions for the integrator
+    :param float tau_feedback:
+         Post-synaptic time constant of the integrative feedback, 
+         in seconds (longer -> slower change but better value retention)
+    :param float tau_input:
+        Post-synaptic time constant of the integrator input, in seconds 
+        (longer -> more input filtering)
+    :param float scale:
+        A scaling value for the input (controls the rate of integration)
+    """
+    net = check_parameters(network, name, neurons, dimensions, tau_feedback, 
+                           tau_input, scale)
     
     if (dimensions<8):
-        integrator=net.make(name,neurons,dimensions)
+        integrator=net.make(name, neurons, dimensions)
     else:
         integrator=net.make_array(name, int(neurons/dimensions),dimensions, quick=True)
     net.connect(integrator,integrator,pstc=tau_feedback)
@@ -52,7 +61,8 @@ def make(network, name='Integrator', neurons=100, dimensions=1, tau_feedback=0.1
 
     integrator.addDecodedTermination('input', numeric.eye(dimensions)*tau_feedback*scale, tau_input, False)
 
-def check_parameters(network, name, neurons, dimensions, tau_feedback, tau_input, scale):
+def check_parameters(network, name, neurons, dimensions, tau_feedback, 
+                     tau_input, scale):
     if isinstance(network, str):
         net = Model.get(network, None)
         if net is None:
