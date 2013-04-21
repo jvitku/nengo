@@ -12,21 +12,15 @@ params=[
     ('tau_input','Input PSTC [s]',float,'Post-synaptic time constant of the integrator input, in seconds (longer -> more input filtering)'),
     ('scale','Scaling factor',float,'A scaling value for the input (controls the rate of integration)'),
     ]
-
-def test_params(net,p):
-    try:
-       net.network.getNode(p['name'])
-       return 'That name is already taken'
-    except:
-        pass
-    if p['neurons']<1: return 'Must have a positive number of neurons'
-    if p['dimensions']<1: return 'Must have at least one dimension'
     
 import numeric
-
 from java.util import ArrayList
 from java.util import HashMap
-def make(net, name='Integrator', neurons=100, dimensions=1, tau_feedback=0.1, tau_input=0.01, scale=1):
+
+def make(network, name='Integrator', neurons=100, dimensions=1, tau_feedback=0.1, tau_input=0.01, scale=1):
+    network = Model.get(network, None)
+    check_parameters(network, name, neurons, dimensions, tau_feedback, tau_input, scale)
+    
     if (dimensions<8):
         integrator=net.make(name,neurons,dimensions)
     else:
@@ -58,3 +52,12 @@ def make(net, name='Integrator', neurons=100, dimensions=1, tau_feedback=0.1, ta
     templateproj.put(name, name)
 
     integrator.addDecodedTermination('input', numeric.eye(dimensions)*tau_feedback*scale, tau_input, False)
+
+def check_parameters(network, name, neurons, dimensions, tau_feedback, tau_input, scale):
+    if network is None:
+        raise ValueError("That network doesn't exist, can't add integrator")
+    if network.get(name, None) is not None:
+        raise ValueError("That name is already taken in this network")
+
+    if neurons<1: return 'Must have a positive number of neurons'
+    if dimensions<1: return 'Must have at least one dimension'
