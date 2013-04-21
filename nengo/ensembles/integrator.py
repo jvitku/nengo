@@ -1,11 +1,12 @@
-from ..connection import gen_transform
+
 from ..networks import array
 
-def make(network, input, name='Integrator', neurons=100, dimensions=1, 
-         tau_feedback=0.1, tau_input=0.01, scale=1):
+def make(network, name, neurons=100, dimensions=1, tau_feedback=0.1):
     """This constructs an integrator of the specified number of dimensions. 
     It requires an input of that number of dimensions after construction.
     
+    :param str network:
+        Name of the parent network
     :param str name:
         Name of the integrator
     :param int neurons:
@@ -15,31 +16,20 @@ def make(network, input, name='Integrator', neurons=100, dimensions=1,
     :param float tau_feedback:
          Post-synaptic time constant of the integrative feedback, 
          in seconds (longer -> slower change but better value retention)
-    :param float tau_input:
-        Post-synaptic time constant of the integrator input, in seconds 
-        (longer -> more input filtering)
-    :param float scale:
-        A scaling value for the input (controls the rate of integration)
     """
-    net = _check_parameters(network, name, neurons, dimensions, tau_feedback, 
-                           tau_input, scale)
+    net = _check_parameters(network, name, neurons, dimensions, tau_feedback)
     
-    if (dimensions<8):
-        integrator=net.make(name, neurons, dimensions)
+    if dimensions < 8:
+        integrator = net.make(name, neurons, dimensions)
     else:
-        integrator=array.make(name, int(neurons/dimensions), dimensions)
+        integrator = array.make(name, dimensions, int(neurons/dimensions), 1)
     
     recurrent_connection = net.connect(integrator, integrator, 
-                                       pstc=tau_feedback)
+                                       filter=tau_feedback)
     
-    eye=gen_transform(dimensions, dimensions)
-    input_connection = net.connect(input, integrator, eye*tau_feedback*scale, 
-                                   tau_input)
-    
-    return integrator, recurrent_connection, input_connection
+    return integrator, recurrent_connection
 
-def _check_parameters(network, name, neurons, dimensions, tau_feedback, 
-                     tau_input, scale):
+def _check_parameters(network, name, neurons, dimensions, tau_feedback):
     if isinstance(network, str):
         net = Model.get(network, None)
         if net is None:
@@ -51,7 +41,7 @@ def _check_parameters(network, name, neurons, dimensions, tau_feedback,
     if network.get(name, None) is not None:
         raise ValueError("That name is already taken in this network")
 
-    if neurons < 1: raise ValueError('Must have a positive number of neurons')
-    if dimensions < 1: raise ValueError('Must have at least one dimension')
+    if neurons < dimensions:
+        raise ValueError("Must have at least one neuron per dimension")
     
     return net
