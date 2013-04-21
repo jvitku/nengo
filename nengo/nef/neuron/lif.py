@@ -1,6 +1,8 @@
 import collections
 import numpy as np
 from .neuron import Neuron
+from ..simulator import SymbolicSignal, Component
+
 
 class LIFNeuron(Neuron):
     def __init__(self, tau_rc=0.02, tau_ref=0.002):
@@ -23,8 +25,8 @@ class LIFNeuron(Neuron):
         self.tau_rc = tau_rc
         self.tau_ref  = tau_ref
 
-    def _alloc(self, size):
-        return LIFPopulation(size, self)
+    def Population(self, size, input_current):
+        return LIFPopulation(size, input_current, self)
         
     def make_alpha_bias(self, max_rates, intercepts):
         """Compute the alpha and bias needed to get the given max_rate
@@ -43,22 +45,32 @@ class LIFNeuron(Neuron):
         return alpha, j_bias
 
 
-class LIFPopulation(object):
-    def __init__(self, size, neuron, dtype='float32'):
-        self.voltage = np.zeros(size, dtype)
-        self.refractory_time = np.zeros(size, dtype)
-        self.output = np.zeros(size, dtype)
+class LIFPopulation(Component):
+    def __init__(self, size, input_current, neuron, dtype='float32'):
+        self.input_current = input_current
+        self.voltage = SymbolicSignal()
+        self.refractory_time = SymbolicSignal()
+        self.output = SymbolicSignal()
+        self.dtype = dtype
 
-    # TODO: have a reset() function at the ensemble and network level
-    #that would actually call this
-    def reset(self):
-        """Resets the state of the neuron."""
-        Neuron.reset(self)
+    @property
+    def reset_outputs(self):
+        return [self.voltage, self.refractory_time, self.output]
 
-        self.voltage.set_value(np.zeros(self.size).astype('float32'))
-        self.refractory_time.set_value(np.zeros(self.size).astype('float32'))
+    def reset(self, state):
+        state[self.voltage] = np.zeros(size, self.dtype)
+        state[self.refractory_time] = np.zeros(size, self.dtype)
+        state[self.output] = np.zeros(size, self.dtype)
 
-    def update(self, J, dt):
+    @property
+    def step_inputs(self):
+        return [self.input_current]
+
+    @property
+    def step_outputs(self):
+        return [self.voltage, self.refractory_time, self.output]
+
+    def step(self, state, dt):
         """Theano update rule that implementing LIF rate neuron type
         Returns dictionary with voltage levels, refractory periods,
         and instantaneous spike raster of neurons.
@@ -67,6 +79,7 @@ class LIFPopulation(object):
             the input current for the current time step
         :param float dt: the timestep of the update
         """
+        J = state[self.input_current]
 
         # Euler's method
         dV = dt / self.tau_rc * (J - self.voltage)
@@ -99,6 +112,7 @@ class LIFPopulation(object):
         # return an ordered dictionary of internal variables to update
         # (including setting a neuron that spikes to a voltage of 0)
 
-        self.voltage[:] = v * (1 - spiked)
-        self.refractory_time[:] = new_refractory_time
-        self.output[:] = spiked
+        state[self.voltage] = v * (1 - spiked)
+        state[self.refractory_time] = new_refractory_time
+        state[self.output] = spiked
+
