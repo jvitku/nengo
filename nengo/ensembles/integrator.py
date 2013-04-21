@@ -18,8 +18,7 @@ from java.util import ArrayList
 from java.util import HashMap
 
 def make(network, name='Integrator', neurons=100, dimensions=1, tau_feedback=0.1, tau_input=0.01, scale=1):
-    network = Model.get(network, None)
-    check_parameters(network, name, neurons, dimensions, tau_feedback, tau_input, scale)
+    net = check_parameters(network, name, neurons, dimensions, tau_feedback, tau_input, scale)
     
     if (dimensions<8):
         integrator=net.make(name,neurons,dimensions)
@@ -54,10 +53,18 @@ def make(network, name='Integrator', neurons=100, dimensions=1, tau_feedback=0.1
     integrator.addDecodedTermination('input', numeric.eye(dimensions)*tau_feedback*scale, tau_input, False)
 
 def check_parameters(network, name, neurons, dimensions, tau_feedback, tau_input, scale):
-    if network is None:
-        raise ValueError("That network doesn't exist, can't add integrator")
+    if isinstance(network, str):
+        net = Model.get(network, None)
+        if net is None:
+            raise ValueError("%s doesn't exist, can't add integrator" % network)
+    else:
+        net = network
+    if not isinstance(network, Network):
+        raise valueError("'Network' is not a Network object") 
     if network.get(name, None) is not None:
         raise ValueError("That name is already taken in this network")
 
-    if neurons<1: return 'Must have a positive number of neurons'
-    if dimensions<1: return 'Must have at least one dimension'
+    if neurons < 1: raise ValueError('Must have a positive number of neurons')
+    if dimensions < 1: raise ValueError('Must have at least one dimension')
+    
+    return net
