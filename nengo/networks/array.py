@@ -7,33 +7,6 @@ title='Network Array'
 label='Network\nArray'
 icon='array.png'
 
-class SignInputPanel(PropertyInputPanel,DocumentListener):
-    def __init__(self,property):
-        PropertyInputPanel.__init__(self,property)
-        self.comboBox = JComboBox(["Unconstrained", "Positive", "Negative"])
-        self.add(self.comboBox)    
-        
-    def isValueSet(self):
-        return True
-    def getValue(self):
-        item = self.comboBox.getSelectedItem()
-        if item=="Positive":
-            return 1
-        elif item =="Negative":
-            return -1
-        else:
-            return 0
-    def setValue(self, value):
-        pass 
-
-class PTemplateSign(Property):
-    def createInputPanel(self):
-        return SignInputPanel(self)
-    def getTypeName(self):
-        return "Encoder Sign"
-    def getTypeClass(self):
-        return PInt
-    
 description="""<html>This template enables constructing subnetworks full D (# of dimensions) independent populations of neurons.  These are faster to construct but cannot compute all the same nonlinear functions as a single large population with D dimensions.</html>"""
 
 params=[
@@ -49,7 +22,21 @@ params=[
     ('useQuick', 'Quick mode', bool,'Uses the exact same encoders and decoders for each ensemble in the array'),
     ]
 
-def test_params(net,p):
+
+from ..nef import Model
+
+def make(network, name, ensembles, neurons, dimensions, **ensemble_params):
+         # radius=1.0, rLow=200, rHigh=400, iLow=-1, iHigh=1, encSign=0, useQuick=True):
+    network = Model.get(network)
+
+    check_parameters(network)
+
+    if encSign!=0:
+        ensemble = net.make_array(name, neurons, length, max_rate=(rLow,rHigh), intercept=(iLow, iHigh), radius=radius, encoders=[[encSign]], quick=useQuick)
+    else:
+        ensemble = net.make_array(name, neurons, length, max_rate=(rLow,rHigh), intercept=(iLow, iHigh), radius=radius, quick=useQuick)
+
+def check_parameters(network):
     try:
        net.network.getNode(p['name'])
        return 'That name is already taken'
@@ -58,11 +45,3 @@ def test_params(net,p):
     if p['iLow'] > p['iHigh']: return 'Low intercept must be less than high intercept'
     if p['rLow'] > p['rHigh']: return 'Low max firing rate must be less than high max firing rate'
 
-from ca.nengo.model.impl import NetworkImpl
-from java.util import ArrayList
-from java.util import HashMap
-def make(net,name='Network Array', neurons=50, length=10, radius=1.0, rLow=200, rHigh=400, iLow=-1, iHigh=1, encSign=0, useQuick=True):
-    if encSign!=0:
-        ensemble = net.make_array(name, neurons, length, max_rate=(rLow,rHigh), intercept=(iLow, iHigh), radius=radius, encoders=[[encSign]], quick=useQuick)
-    else:
-        ensemble = net.make_array(name, neurons, length, max_rate=(rLow,rHigh), intercept=(iLow, iHigh), radius=radius, quick=useQuick)
