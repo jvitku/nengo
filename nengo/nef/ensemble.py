@@ -193,9 +193,9 @@ class SpikingEnsemble(Base):
 
         self.default_output = Output()
 
-    @property
-    def num_neurons
-        self.num_neurons = 
+    #@property
+    #def num_neurons
+    #    self.num_neurons = 
 
     @property
     def spikes(self):

@@ -47,10 +47,11 @@ class Distribution(object):
 
 
 class Uniform(Distribution):
-    def __init__(self, low, high):
+    def __init__(self, low, high, seed=None):
         self.low = low
         self.high = high
-
+        self.seed = seed
+        self.rng = Var()
 
 
 class Gaussian(Distribution):
@@ -59,13 +60,16 @@ class Gaussian(Distribution):
         self.std = std
 
 
-class Neuron(object):
-    output = None        # -- a Var
-    input_current = None # -- a Var
+class Neurons(object):
+    def __init__(self, size, input_current=None):
+        self.size = size
+        self.output = Var()        # -- a Var
+        self.input_current = input_current # -- a Var
 
 
-class LIFNeuron(object):
+class LIFNeurons(Neurons):
     def __init__(self, size,
+            input_current=None,
             tau_rc=0.02,
             tau_ref=0.002,
             max_rate=Uniform(200, 400),
@@ -79,8 +83,16 @@ class LIFNeuron(object):
         :param float tau_ref: refractory period length (s)
 
         """
-        self.__dict__.update(locals())
-        del self.__dict__['self']
+        Neurons.__init__(self, size, input_current)
+        self.tau_rc = tau_rc
+        self.tau_ref = tau_ref
+        self.max_rate = max_rate
+        self.intercept = intercept
+        self.seed = seed
+        self.alpha = Var()
+        self.j_bias = Var()
+        self.voltage = Var()
+        self.refractory_time = Var()
 
 
 class Filter(object):
@@ -121,18 +133,32 @@ class DirectEnsemble(Ensemble):
         Ensemble.__init__(dimensions, array_size)
         pass
 
+
 class NeuronEnsemble(Ensemble):
-    def __init__(self, dimensions,
+    def __init__(self,
+            neurons,
+            dimensions,
             array_size=Ensemble.DEFAULT_ARRAY_SIZE,
             learned_terminations=None
+
             ):
         """
         learned terminations: list
         """
-        Ensemble.__init__(dimensions, array_size)
+        Ensemble.__init__(self, dimensions, array_size)
+        self.neurons = neurons
         if learned_terminations is None:
             learned_terminations = []
         self.learned_terminations = learned_terminations
+
+    @property
+    def spikes(self):
+        return self.neurons.output
+
+    @property
+    def num_neurons(self):
+        # XXX: divide by array_size?
+        return self.neurons.size
 
 
 class Node(object):
@@ -159,7 +185,6 @@ class TimeNode(Node):
         if output.name is None:
             output.name = name
         self.name = name
-        
 
 
 class PiecewiseNode(Node):
@@ -242,10 +267,9 @@ class Network(object):
         return rval
 
 
-
 simulation_time = Var('time')
-
 simulation_stop_now = Var('stop_when')
+
 
 class Simulator(object):
     def __init__(self, network):
