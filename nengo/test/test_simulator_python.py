@@ -5,9 +5,9 @@ from nengo.object_api import (
         NeuronEnsemble,
         Probe,
         simulation_time,
+        Simulator,
         TimeNode,
         )
-from nengo.simulator_python import Simulator
 
 
 def test_smoke_1():
@@ -15,12 +15,13 @@ def test_smoke_1():
     tn = net.add(TimeNode(sin, name='sin'))
     net.add(Probe(tn.output))
     net.add(Probe(simulation_time))
-    sim = Simulator(net, dt=0.001, verbosity=1)
+    sim = Simulator(net, dt=0.001, verbosity=0)
     results = sim.run(.1)
 
     assert len(results[simulation_time]) == 101
     for i, t in enumerate(results[simulation_time]):
         assert results[tn.output][i] == sin(t)
+
 
 def test_smoke_2():
     net = Network()
@@ -29,7 +30,7 @@ def test_smoke_2():
     ens = net.add(NeuronEnsemble(LIFNeurons(13), dimensions=1))
     net.add(Probe(ens.spikes))
 
-    sim = Simulator(net, dt=0.001, verbosity=1)
+    sim = Simulator(net, dt=0.001, verbosity=0)
     results = sim.run(.1)
 
     assert len(results[simulation_time]) == 101

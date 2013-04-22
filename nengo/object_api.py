@@ -271,7 +271,10 @@ simulation_time = Var('time')
 simulation_stop_now = Var('stop_when')
 
 
-class Simulator(object):
+class SimulatorBase(object):
+
+    _backends = {}
+
     def __init__(self, network):
         self.network = network
         self.simulation_time = 0.0
@@ -286,4 +289,10 @@ class Simulator(object):
         """
         raise NotImplementedError('Use a simulator subclass')
 
-
+def Simulator(*args, **kwargs):
+    backend = kwargs.pop('backend', 'reference')
+    if backend not in SimulatorBase._backends:
+        raise ValueError('backend "%s" not recognized, did you remember to'
+            ' import the python module that implements that backend?' %
+            backend)
+    return SimulatorBase._backends[backend](*args, **kwargs)

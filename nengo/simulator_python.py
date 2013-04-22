@@ -41,9 +41,9 @@ def register_step_carry_forward(cls, *args):
     register_step(cls)(carry_forward_step)
 
 
-class Simulator(API.Simulator):
+class Simulator(API.SimulatorBase):
     def __init__(self, network, dt, verbosity=0):
-        API.Simulator.__init__(self, network)
+        API.SimulatorBase.__init__(self, network)
         self.state = {}
         self.dt = dt
         self.verbosity = verbosity
@@ -52,14 +52,14 @@ class Simulator(API.Simulator):
             build_fn = build_registry.get(type(member), None)
             if build_fn:
                 if verbosity:
-                    print 'Build:', member, build_fn
+                    print 'Build:', member, build_fn, verbosity
                 build_fn(member, self.state, self.dt)
             elif verbosity:
                 print 'No build:', member
         self.reset()
 
     def reset(self):
-        API.Simulator.reset(self)
+        API.SimulatorBase.reset(self)
         self.state[API.simulation_time] = self.simulation_time
         for member in self.network.all_members:
             reset_fn = reset_registry.get(type(member), None)
@@ -102,6 +102,7 @@ class Simulator(API.Simulator):
         steps = int(sim_time / self.dt)
         return self.run_steps(steps)
 
+API.SimulatorBase._backends['reference'] = Simulator
 
 #
 # TimeNode
