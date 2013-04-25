@@ -267,6 +267,42 @@ class Network(object):
         return rval
 
 
+class Connection(object):
+    def __init__(self, pre, post):
+        self.pre = pre
+        self.post = post
+
+
+class LearnedConnection(Connection):
+    def __init__(self, pre, post, error_signal):
+        Connection.__init__(self, pre, post)
+        self.error_signal = error_signal
+
+
+class hPES_Connection(LearnedConnection):
+    theta_tau = 0.02
+    unsupervised_rate_factor = 10.
+    supervision_ratio = 1.0
+    def __init__(self, pre, post, error_signal,
+                 theta_tau=theta_tau,
+                 unsupervised_rate_factor=unsupervised_rate_factor,
+                 supervision_ratio=supervision_ratio,
+                ):
+        LearnedConnection.__init__(self, pre, post, error_signal)
+        self.theta_tau = theta_tau
+        self.unsupervised_rate_factor = unsupervised_rate_factor
+        self.supervision_ratio = supervision_ratio
+
+        self.seed = 123
+
+        self.gains = Var()
+        self.theta = Var()
+        self.pre_filtered = Var()
+        self.post_filtered = Var()
+        self.weight_matrix = Var()
+        self.supervised_learning_rate = Var()
+
+
 simulation_time = Var('time')
 simulation_stop_now = Var('stop_when')
 
@@ -292,7 +328,10 @@ class SimulatorBase(object):
 def Simulator(*args, **kwargs):
     backend = kwargs.pop('backend', 'reference')
     if backend not in SimulatorBase._backends:
-        raise ValueError('backend "%s" not recognized, did you remember to'
-            ' import the python module that implements that backend?' %
-            backend)
+        if backend == 'numpy':
+            import simulator_numpy
+        else:
+            raise ValueError('backend "%s" not recognized, did you remember to'
+                ' import the python module that implements that backend?' %
+                backend)
     return SimulatorBase._backends[backend](*args, **kwargs)

@@ -13,14 +13,14 @@ step_registry = {}
 probe_registry = {}
 sample_registry = {}
 
-build = partial(call_registry, reg=build_registry)
-reset = partial(call_registry, reg=reset_registry)
-step = partial(call_registry, reg=step_registry)
-
 
 def call_registry(obj, *args, **kwargs):
     reg = kwargs.pop('reg')
     return reg[type(obj)](obj, *args, **kwargs)
+
+build = partial(call_registry, reg=build_registry)
+reset = partial(call_registry, reg=reset_registry)
+step = partial(call_registry, reg=step_registry)
 
 
 def register_impl(cls):
@@ -295,4 +295,6 @@ class NeuronEnsemble(ImplBase):
     def step(ens, old_state, new_state):
         step(ens.neurons, old_state, new_state)
         # XXX incomplete
+
+
 
