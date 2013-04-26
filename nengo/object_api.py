@@ -10,34 +10,9 @@ except ImportError:
         # -- Fall back on un-ordered dictionaries
         OrderedDict = dict
 
-
-class Var(object):
-    def __init__(self, name=None, size=1, dtype=float, shape=None):
-        """
-        Parameters
-        ----------
-
-        string: identifier, not necessarily unique
-
-        int: number of elements
-
-        string: nature of numbers
-
-        tuple of int: logical shape of array (optional)
-        """
-        self.name = name
-        self.size = size
-        self.dtype = dtype
-        self.shape = shape
-
-    def __str__(self):
-        if self.name:
-            return 'Var{%s}' % self.name
-        else:
-            return 'Var{%s}' % id(self)
-
-    def __repr__(self):
-        return str(self)
+class SelfDependencyError(Exception):
+    """Network cannot be simulated because some node input depends on the
+    node's own output on the same time-step."""
 
 
 class Distribution(object):
@@ -60,11 +35,171 @@ class Gaussian(Distribution):
         self.std = std
 
 
-class Neurons(object):
-    def __init__(self, size, input_current=None):
+class Var(object):
+    def __init__(self, name=None, size=1, dtype=float, shape=None):
+        """
+        A variable that will contain some numeric data.
+
+        Parameters
+        ----------
+
+        string: identifier, not necessarily unique
+
+        int: number of elements
+
+        string: nature of numbers
+
+        tuple of int: logical shape of array (optional)
+        """
+        self.name = name
         self.size = size
-        self.output = Var()        # -- a Var
-        self.input_current = input_current # -- a Var
+        self.dtype = dtype
+        self.shape = shape
+
+    def __str__(self):
+        clsname = self.__class__.__name__
+        if self.name:
+            return '%s{%s}' % (clsname, self.name)
+        else:
+            return '%s{%s}' % (clsname, id(self))
+
+    def __repr__(self):
+        return str(self)
+
+
+class Node(object):
+    def __init__(self):
+        self.outputs = OrderedDict()
+        self.inputs = OrderedDict()
+
+    @property
+    def output(self):
+        return self.outputs['X']
+
+    def add_to_network(self, network):
+        network.nodes.append(self)
+
+class Probe(Node):
+    def __init__(self, target):
+        Node.__init__(self)
+        self.inputs['target'] = target
+        self.outputs['stats'] = Var() # -- no default output
+
+    @property
+    def target(self):
+        return self.inputs['target']
+
+    @property
+    def stats(self):
+        return self.outputs['stats']
+
+    def add_to_network(self, network):
+        network.probes.append(self)
+
+
+class Filter(Node):
+    def __init__(self, var, tau):
+        """
+        tau: float
+        """
+        Node.__init__(self)
+        self.tau = tau
+        self.inputs['var'] = var
+        self.outputs['X'] = Var()
+
+    def add_to_network(self, network):
+        network.filters.append(self)
+
+
+class Connection(object):
+    def __init__(self, src, dst):
+        """
+        Parameters
+        ----------
+        :param Var src:
+        :param Var dst: 
+        """
+        self.inputs = OrderedDict()
+        self.outputs = OrderedDict()
+        self.inputs['X'] = src
+        self.outputs['X'] = dst
+
+    def add_to_network(self, network):
+        network.connections.append(self)
+
+
+class Network(object):
+    def __init__(self):
+        self.probes = []
+        self.connections = []
+        self.nodes = []
+        self.networks = []
+        self.filters = []
+
+    def add(self, thing):
+        thing.add_to_network(self)
+        return thing
+
+    @property
+    def all_probes(self):
+        if self.networks: raise NotImplementedError()
+        return list(self.probes)
+
+    @property
+    def all_connections(self):
+        if self.networks: raise NotImplementedError()
+        return list(self.connections)
+
+    @property
+    def all_nodes(self):
+        if self.networks: raise NotImplementedError()
+        return list(self.nodes)
+
+    @property
+    def all_filters(self):
+        if self.networks: raise NotImplementedError()
+        return list(self.filters)
+
+    @property
+    def members(self):
+        rval = []
+        rval.extend(self.nodes)
+        rval.extend(self.connections)
+        rval.extend(self.probes)
+        rval.extend(self.filters)
+        return rval
+
+    @property
+    def all_members(self):
+        rval = []
+        rval.extend(self.all_nodes)
+        rval.extend(self.all_connections)
+        rval.extend(self.all_probes)
+        rval.extend(self.all_filters)
+        return rval
+
+
+
+
+
+class Neurons(Node):
+    def __init__(self, size, input_current):
+        """
+        :param int size:
+        :param Var input_current:
+        """
+        Node.__init__(self)
+        self.size = size
+        self.inputs['input_current'] = input_current
+        self.outputs['X'] = Var()
+
+    @property
+    def input_current(self):
+        return self.inputs['input_current']
+
+    @input_current.setter
+    def input_current(self, val):
+        self.inputs['input_current'] = val
 
 
 class LIFNeurons(Neurons):
@@ -83,6 +218,8 @@ class LIFNeurons(Neurons):
         :param float tau_ref: refractory period length (s)
 
         """
+        if input_current is None:
+            input_current = Var()
         Neurons.__init__(self, size, input_current)
         self.tau_rc = tau_rc
         self.tau_ref = tau_ref
@@ -94,84 +231,48 @@ class LIFNeurons(Neurons):
         self.voltage = Var()
         self.refractory_time = Var()
 
+    # TODO: Python magic to support
+    # alpha = inputs_getter_setter('alpha')
 
-class Filter(object):
-    def __init__(self, tau):
-        """
-        tau: float
-        """
-        self.tau = tau
-        self.output = Var()
+    @property
+    def alpha(self):
+        return self.inputs['alpha']
+
+    @alpha.setter
+    def alpha(self, val):
+        self.inputs['alpha'] = val
+
+    @property
+    def j_bias(self):
+        return self.inputs['j_bias']
+
+    @j_bias.setter
+    def j_bias(self, val):
+        self.inputs['j_bias'] = val
+
+    @property
+    def voltage(self):
+        return self.inputs['voltage']
+
+    @voltage.setter
+    def voltage(self, val):
+        self.inputs['voltage'] = val
+
+    @property
+    def refractory_time(self):
+        return self.inputs['refractory_time']
+
+    @refractory_time.setter
+    def refractory_time(self, val):
+        self.inputs['refractory_time'] = val
+
+
 
 
 class NetworkMember(object):
     def add_to_network(self, network):
         raise NotImplementedError('override in subclass')
 
-
-class Ensemble(NetworkMember):
-    DEFAULT_ARRAY_SIZE = 1
-    def __init__(self, dimensions, array_size=DEFAULT_ARRAY_SIZE):
-        self.dimensions = int(dimensions)
-        self.array_size = int(array_size)
-
-        self.origin = OrderedDict()
-
-        self.decoded_input = OrderedDict()
-
-        # set up a dictionary for encoded_input connections
-        self.encoded_input = OrderedDict()
-
-    def add_to_network(self, network):
-        network.ensembles.append(self)
-
-
-class DirectEnsemble(Ensemble):
-    def __init__(self, dimensions,
-            array_size=Ensemble.DEFAULT_ARRAY_SIZE,
-            ):
-        Ensemble.__init__(dimensions, array_size)
-        pass
-
-
-class NeuronEnsemble(Ensemble):
-    def __init__(self,
-            neurons,
-            dimensions,
-            array_size=Ensemble.DEFAULT_ARRAY_SIZE,
-            learned_terminations=None
-
-            ):
-        """
-        learned terminations: list
-        """
-        Ensemble.__init__(self, dimensions, array_size)
-        self.neurons = neurons
-        if learned_terminations is None:
-            learned_terminations = []
-        self.learned_terminations = learned_terminations
-
-    @property
-    def spikes(self):
-        return self.neurons.output
-
-    @property
-    def num_neurons(self):
-        # XXX: divide by array_size?
-        return self.neurons.size
-
-
-class Node(object):
-    def __init__(self):
-        self.outputs = OrderedDict()
-        self.inputs = OrderedDict()
-
-    @property
-    def output(self):
-        return self.outputs['X']
-
-    def add_to_network(self, network):
-        network.nodes.append(self)
 
 
 class TimeNode(Node):
@@ -197,85 +298,10 @@ class PiecewiseNode(Node):
         self.table = table
 
 
-class Connection(object):
-    def __init__(self, src, dst,
-            ):
-        self.src = src
-        self.dst = dst
-
-    def add_to_network(self, network):
-        network.connections.append(self)
-
-
-class Probe(object):
-    def __init__(self, target):
-        self.target = target
-        self.stats = Var()
-
-    def add_to_network(self, network):
-        network.probes.append(self)
-
-
-class Network(object):
-    def __init__(self):
-        self.probes = []
-        self.ensembles = []
-        self.connections = []
-        self.nodes = []
-        self.networks = []
-
-    def add(self, thing):
-        thing.add_to_network(self)
-        return thing
-
-    @property
-    def all_probes(self):
-        if self.networks: raise NotImplementedError()
-        return list(self.probes)
-
-    @property
-    def all_ensembles(self):
-        if self.networks: raise NotImplementedError()
-        return list(self.ensembles)
-
-    @property
-    def all_connections(self):
-        if self.networks: raise NotImplementedError()
-        return list(self.connections)
-
-    @property
-    def all_nodes(self):
-        if self.networks: raise NotImplementedError()
-        return list(self.nodes)
-
-    @property
-    def members(self):
-        rval = []
-        rval.extend(self.nodes)
-        rval.extend(self.connections)
-        rval.extend(self.ensembles)
-        rval.extend(self.probes)
-        return rval
-
-    @property
-    def all_members(self):
-        rval = []
-        rval.extend(self.all_nodes)
-        rval.extend(self.all_connections)
-        rval.extend(self.all_ensembles)
-        rval.extend(self.all_probes)
-        return rval
-
-
-class Connection(object):
-    def __init__(self, pre, post):
-        self.pre = pre
-        self.post = post
-
 
 class LearnedConnection(Connection):
-    def __init__(self, pre, post, error_signal):
-        Connection.__init__(self, pre, post)
+    def __init__(self, src, dst, error_signal):
+        Connection.__init__(self, src, dst)
         self.error_signal = error_signal
 
 
@@ -283,12 +309,12 @@ class hPES_Connection(LearnedConnection):
     theta_tau = 0.02
     unsupervised_rate_factor = 10.
     supervision_ratio = 1.0
-    def __init__(self, pre, post, error_signal,
+    def __init__(self, src, dst, error_signal,
                  theta_tau=theta_tau,
                  unsupervised_rate_factor=unsupervised_rate_factor,
                  supervision_ratio=supervision_ratio,
                 ):
-        LearnedConnection.__init__(self, pre, post, error_signal)
+        LearnedConnection.__init__(self, src, dst, error_signal)
         self.theta_tau = theta_tau
         self.unsupervised_rate_factor = unsupervised_rate_factor
         self.supervision_ratio = supervision_ratio
@@ -297,8 +323,8 @@ class hPES_Connection(LearnedConnection):
 
         self.gains = Var()
         self.theta = Var()
-        self.pre_filtered = Var()
-        self.post_filtered = Var()
+        self.src_filtered = Var()
+        self.dst_filtered = Var()
         self.weight_matrix = Var()
         self.supervised_learning_rate = Var()
 

@@ -188,12 +188,14 @@ class LIFNeurons(ImplBase):
     def step(neurons, old_state, new_state):
         alpha = old_state[neurons.alpha]
         j_bias = old_state[neurons.j_bias]
+        J  = j_bias + old_state[neurons.input_current]
         voltage = old_state[neurons.voltage]
         refractory_time = old_state[neurons.refractory_time]
         tau_rc = neurons.tau_rc
         tau_ref = neurons.tau_ref
         dt = new_state[API.simulation_time] - old_state[API.simulation_time]
-        J  = j_bias # XXX WRONG MATH
+        # -- use the input_current that was computed by the connections
+        # -- on the last time through
 
         # Euler's method
         dV = dt / tau_rc * (J - voltage)
@@ -238,36 +240,102 @@ class LIFNeurons(ImplBase):
 @register_impl
 class NeuronEnsemble(ImplBase):
     @staticmethod
-    def build(ens, state, dt):
-        build(ens.neurons, state, dt)
-        # XXX incomplete
+    def build(self, state, dt):
+        # -- neurons are not known to the simulator, so build them directly
+        build(self.neurons, state, dt)
+
+        # N.B. re-use neurons rng
+        rng = state[self.neurons.rng]
+
+        encoders = rng.randn(self.neurons.size, self.dimensions)
+
+        encoders = self.make_encoders(encoders=self.encoders)
+        norm = np.sum(encoders * encoders, axis=1).reshape(
+            (self.neuron_model.size, 1))
+        encoders = encoders / np.sqrt(norm) * neuron_model.alpha[: None]
+
+        state[self.encoders] = encoders
 
     @staticmethod
-    def reset(ens, state):
-        reset(ens.neurons, state)
+    def reset(self, state):
+        reset(self.neurons, state)
 
     @staticmethod
-    def step(ens, old_state, new_state):
-        step(ens.neurons, old_state, new_state)
-        # XXX incomplete
+    def step(self, old_state, new_state):
+        
+        step(self.neurons, old_state, new_state)
+        # find the total input current to this population of neurons
+        
+        # apply respective biases to neurons in the population 
+        J = np.zeros((self.neuron_model.size, 1))
+        J += self.neuron_model.j_bias
+
+        #add in neuron->neuron currents
+        for c in self.neuron_inputs:
+            # add its values directly to the input current
+            J += c.get_post_input(old_state, dt)
+
+        #add in vector->vector currents
+        for c in self.vector_inputs:
+            fuck = c.get_post_input(old_state, dt) 
+            J += np.dot( self.encoders, 
+                c.get_post_input(old_state, dt)).reshape(
+                (self.neuron_model.size, 1))
+
+        # if noise has been specified for this neuron,
+        if self.noise: 
+            # generate random noise values, one for each input_current element, 
+            # with standard deviation = sqrt(self.noise=std**2)
+            # When simulating white noise, the noise process must be scaled by
+            # sqrt(dt) instead of dt. Hence, we divide the std by sqrt(dt).
+            if self.noise.type == 'gaussian':
+                J += random.gaussian(
+                    size=self.bias.shape, std=np.sqrt(self.noise/dt))
+            '''elif self.noise.type == 'uniform':
+                J += random.uniform(
+                    size=self.bias.shape, 
+                    low=-self.noise / np.sqrt(dt), 
+                    high=self.noise / np.sqrt(dt))'''
+        
+        # pass the input current total into the neuron model
+        self.spikes = self.neuron_model._step(new_state, J, dt)
+    
+        # update the weight matrices on learned terminations
+        for c in self.vector_inputs+self.neuron_inputs:
+            c.learn(dt)
+
+        # compute the decoded origin decoded_input from the neuron output
+        for i,o in enumerate(self.outputs):
+            new_state[o] = np.dot(self.neuron_model.output, self.decoders[i])
+
+@register_impl
+class Connection(ImplBase):
+    @staticmethod
+    def build(self, state, dt):
+        # compute the decoded origin decoded_input from the neuron output
+        for i,o in enumerate(self.outputs):
+            state[o] = np.zeros((self.neuron_model.size, 1))
+            self.decoders += [
+                self.compute_decoders(func=self.output_funcs[i], 
+                dt=dt, eval_points=self.eval_points) ]
 
 
 @register_impl
 class hPES_Connection(ImplBase):
     @staticmethod
     def build(self, state, dt):
-        encoders = state[self.post.encoders]
-        pre_filtered = state[self.pre.spikes].copy()
-        post_filtered = state[self.post.spikes].copy()
-        state[self.pre_filtered] = pre_filtered
-        state[self.post_filtered] = post_filtered
+        encoders = state[self.dst.encoders]
+        src_filtered = state[self.src.spikes].copy()
+        dst_filtered = state[self.dst.spikes].copy()
+        state[self.src_filtered] = src_filtered
+        state[self.dst_filtered] = dst_filtered
 
     @staticmethod
     def reset(self, state):
-        encoders = state[self.post.encoders]
+        encoders = state[self.dst.encoders]
         rng = np.random.RandomState(self.seed)
         theta = rng.uniform(low=5e-5, high=15e-5,
-                            size=(self.post.array_size, self.post.neurons_num))
+                            size=(self.dst.array_size, self.dst.neurons_num))
         gains = np.sqrt((encoders ** 2).sum(axis=-1))
         theta *= gains
         state[self.gains] = gains
@@ -284,13 +352,13 @@ class hPES_Connection(ImplBase):
 
 
         delta_supervised = (supervised_rate
-                            * pre_filtered[None,:]
+                            * src_filtered[None,:]
                             * encoded_error[:,None])
 
         delta_unsupervised = (unsupervised_rate
-                              * self.pre_filtered[None,:]
-                              * self.post_filtered[:,None]
-                              * (self.post_filtered-self.theta)[:,None]
+                              * self.src_filtered[None,:]
+                              * self.dst_filtered[:,None]
+                              * (self.dst_filtered-self.theta)[:,None]
                               * self.gains[:,None])
 
         new_wm = (weight_matrix
@@ -300,15 +368,15 @@ class hPES_Connection(ImplBase):
         # update filtered inputs
         dt = new_state[simulation_time] - old_state[simulation_time]
         alpha = dt / self.pstc
-        new_pre = pre_filtered + alpha * (pre_spikes - pre_filtered)
-        new_post = post_filtered + alpha * (post_spikes - post_filtered)
+        new_src = src_filtered + alpha * (src_spikes - src_filtered)
+        new_dst = dst_filtered + alpha * (dst_spikes - dst_filtered)
 
         # update theta
         alpha_theta = dt / self.theta_tau
-        new_theta = theta + alpha_theta * (new_post - theta)
+        new_theta = theta + alpha_theta * (new_dst - theta)
 
         state[self.weight_matrix] =  new_wm
-        state[self.pre_filtered] = new_pre
-        state[self.post_filtered] = new_post
+        state[self.src_filtered] = new_src
+        state[self.dst_filtered] = new_dst
         state[self.theta] = new_theta
 

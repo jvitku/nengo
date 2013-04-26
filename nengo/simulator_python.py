@@ -1,7 +1,10 @@
 import copy
 from functools import partial
+import sys
 import math
 import random
+
+import networkx as nx
 
 import object_api as API
 
@@ -50,6 +53,25 @@ class ImplBase(object):
     def sample(obj, N):
         pass
 
+def scheduling_graph(network):
+    all_members = network.all_members
+    DG = nx.DiGraph()
+    for member in all_members:
+        if isinstance(member, API.Filter):
+            # -- filters take their inputs from the previous time step,
+            #    and they take no input from the current time step
+            pass
+        else:
+            # -- all other nodes take all inputs from the current time step
+            for key, val in member.inputs.items():
+                assert val, val
+                DG.add_edge(val, member)
+        for key, val in member.outputs.items():
+            assert val, val
+            DG.add_edge(member, val)
+    return DG
+
+
 
 class Simulator(API.SimulatorBase):
     def __init__(self, network, dt, verbosity=0):
@@ -58,7 +80,19 @@ class Simulator(API.SimulatorBase):
         self.dt = dt
         self.verbosity = verbosity
         self.state[API.simulation_time] = self.simulation_time
-        for member in self.network.all_members:
+        DG = scheduling_graph(network)
+        #import matplotlib.pyplot as plt
+        #nx.draw(DG)
+        #plt.show()
+        try:
+            self.full_ordering = nx.topological_sort(DG)
+        except nx.NetworkXUnfeasible:
+            #nx.write_multiline_adjlist(DG, sys.stdout)
+            raise API.SelfDependencyError()
+        self.member_ordering = [n for n in self.full_ordering
+                              if not isinstance(n, API.Var)]
+
+        for member in self.member_ordering:
             build_fn = build_registry.get(type(member), None)
             if build_fn:
                 if verbosity:
@@ -71,7 +105,7 @@ class Simulator(API.SimulatorBase):
     def reset(self):
         API.SimulatorBase.reset(self)
         self.state[API.simulation_time] = self.simulation_time
-        for member in self.network.all_members:
+        for member in self.member_ordering:
             reset_fn = reset_registry.get(type(member), None)
             if reset_fn:
                 if self.verbosity:
@@ -83,7 +117,7 @@ class Simulator(API.SimulatorBase):
     def run_steps(self, steps):
         old_state = self.state
         step_fns = []
-        for member in self.network.all_members:
+        for member in self.member_ordering:
             step_fn = step_registry.get(type(member), None)
             if step_fn:
                 if self.verbosity:
@@ -278,23 +312,5 @@ class LIFNeurons(ImplBase):
         new_state[neurons.voltage] = new_voltage
         new_state[neurons.refractory_time] = new_refractory_time
         new_state[neurons.output] = new_output
-
-
-@register_impl
-class NeuronEnsemble(ImplBase):
-    @staticmethod
-    def build(ens, state, dt):
-        build(ens.neurons, state, dt)
-        # XXX incomplete
-
-    @staticmethod
-    def reset(ens, state):
-        reset(ens.neurons, state)
-
-    @staticmethod
-    def step(ens, old_state, new_state):
-        step(ens.neurons, old_state, new_state)
-        # XXX incomplete
-
 
 

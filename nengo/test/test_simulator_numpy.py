@@ -28,7 +28,7 @@ def test_smoke_2():
     net = Network()
     net.add(Probe(simulation_time))
 
-    ens = net.add(NeuronEnsemble(LIFNeurons(13), dimensions=1))
+    ens = net.add(NeuronEnsemble(LIFNeurons(13)))
     net.add(Probe(ens.spikes))
 
     sim = Simulator(net, dt=0.001, verbosity=0, backend='numpy')
@@ -49,9 +49,9 @@ def test_smoke_3():
     net = Network()
     net.add(Probe(simulation_time))
 
-    ens1 = net.add(NeuronEnsemble(LIFNeurons(13), dimensions=1))
+    ens1 = net.add(NeuronEnsemble(LIFNeurons(13)))
     ens2 = net.add(NeuronEnsemble(LIFNeurons(11), dimensions=1))
-    conn = net.add(hPES_Connection(ens1, ens2, )
+    conn = net.add(hPES_Connection(ens1, ens2, ))
 
     net.add(Probe(ens.spikes))
 
