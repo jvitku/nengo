@@ -224,6 +224,36 @@ class Filter(ImplBase):
             + self.tau * old_state[self.inputs['var']])
 
 
+@register_impl
+class LinearNeurons(ImplBase):
+    @staticmethod
+    def reset(self, state):
+        state[self.outputs['X']] = np.array(
+            state[self.inputs['input_current']])
+
+    @staticmethod
+    def step(self, old_state, new_state):
+        state[self.outputs['X']] = np.array(
+            state[self.inputs['input_current']])
+
+
+@register_impl
+class MSE_MinimizingConnection(ImplBase):
+    @staticmethod
+    def reset(self, state):
+        state[self.outputs['X']] = np.asarray([0])
+        state[self.outputs['error_signal']] = np.zeros_like(
+                state[self.inputs['target']])
+
+    @staticmethod
+    def step(self, old_state, new_state):
+        src = state[self.inputs['X']])
+        target = state[self.inputs['target']])
+
+        state[self.outputs['X']] = np.asarray([0])
+        state[self.outputs['error_signal']] = np.zeros_like(
+                state[self.inputs['target']])
+
 
 
 

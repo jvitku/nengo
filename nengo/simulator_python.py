@@ -114,6 +114,10 @@ class Simulator(API.SimulatorBase):
                 reset_fn(member, self.state)
             elif self.verbosity:
                 print 'No reset:', member
+            for key, val in member.outputs.items():
+                if val not in self.state:
+                    raise ResetIncomplete("Reset %s did not produce outputs[%s]" % (
+                        member, key))
 
     def run_steps(self, steps):
         old_state = self.state
@@ -133,10 +137,10 @@ class Simulator(API.SimulatorBase):
             new_state[API.simulation_time] = self.simulation_time
             for step_fn, member in step_fns:
                 step_fn(member, old_state, new_state)
-                #for key, val in member.outputs.items():
-                    #if val not in new_state:
-                        #raise StepIncomplete("Step %s did not produce outputs[%s]" % (
-                            #member, key))
+                for key, val in member.outputs.items():
+                    if val not in new_state:
+                        raise StepIncomplete("Reset %s did not produce outputs[%s]" % (
+                            member, key))
             old_state = new_state
         self.state = new_state
 

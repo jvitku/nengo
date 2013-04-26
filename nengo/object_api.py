@@ -328,8 +328,9 @@ class LearnedConnection(Connection):
 
 class MSE_MinimizingConnection(LearnedConnection):
     def __init__(self, src, dst, target):
-        LearnedConnection.__init__(src, dst)
+        LearnedConnection.__init__(self, src, dst)
         self.inputs['target'] = target
+        self.outputs['weight'] = Var()
 
     @property
     def target(self):
