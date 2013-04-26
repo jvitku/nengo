@@ -63,6 +63,7 @@ class Var(object):
         self.dtype = dtype
         self.shape = shape
 
+
     def __str__(self):
         clsname = self.__class__.__name__
         if self.name:
@@ -228,7 +229,7 @@ class Neurons(Node):
         Node.__init__(self)
         self.size = size
         if input_current is None:
-            input_current = Var()
+            input_current = Var(name='input_current', size=size)
         self._input_current = input_current
         self.inputs['input_current'] = input_current.delayed()
         self.outputs['X'] = Var()
@@ -245,8 +246,8 @@ class LinearNeurons(Neurons):
 
 
 class LIFNeurons(Neurons):
-    _input_names = [
-        'alpha', 'j_bias', 'voltage', 'refractory_time', 'input_current']
+    # -- N.B. does not include input_current
+    _input_names = ['alpha', 'j_bias', 'voltage', 'refractory_time']
 
     def __init__(self, size,
             input_current=None,
@@ -271,9 +272,7 @@ class LIFNeurons(Neurons):
         self.seed = seed
 
         for name in self._input_names:
-            if name in ('input_current',):
-                continue
-            self.outputs[name] = Var(size=size)
+            self.outputs[name] = Var(name=name, size=size)
             self.inputs[name] = self.outputs[name].delayed()
 
 

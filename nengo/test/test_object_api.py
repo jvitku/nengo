@@ -57,10 +57,10 @@ class ObjectAPISmokeTests(unittest.TestCase):
         net = Network()
         net.add(Probe(simulation_time))
 
-        ens1 = net.add(LIFNeurons(3))
-        ens2 = net.add(LIFNeurons(5))
-        c1 = net.add(Connection(ens1.output, ens2.input_current))
-        c2 = net.add(Connection(ens2.output, ens1.input_current))
+        v1 = API.Var()
+        v2 = API.Var()
+        c1 = net.add(Connection(v1, v2))
+        c2 = net.add(Connection(v2, v1))
 
         nose.tools.assert_raises(SelfDependencyError,
             self.Simulator, net, dt=0.001, verbosity=0)
@@ -69,14 +69,16 @@ class ObjectAPISmokeTests(unittest.TestCase):
         net = Network()
 
         ens1 = net.add(LIFNeurons(3))
-        ens2 = net.add(LIFNeurons(5))
-        c1 = net.add(Connection(ens1.output, ens2.input_current))
-        probe = net.add(Probe(ens2.output))
+        v = API.Var()
+        c1 = net.add(Connection(ens1.output, v))
+        filt = net.add(Filter(v))
+        probe = net.add(Probe(filt.output))
         assert ens1.output is not None
-        assert ens2.input_current is not None
 
         sim = self.Simulator(net, dt=0.001, verbosity=0)
-        assert sim.member_ordering == [ens1, c1, ens2, probe]
+        ordering = sim.member_ordering
+        desired = [ens1, c1, filt, probe]
+        assert desired == ordering, (desired, ordering)
 
     def test_schedule_cycle_with_filter(self):
         net = Network()

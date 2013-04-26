@@ -36,9 +36,9 @@ class TimeNode(ImplBase):
         state[node.output] = np.asarray(node.func(state[API.simulation_time]))
 
     @staticmethod
-    def step(node, old_state, new_state):
-        t = new_state[API.simulation_time] # XXX new state or old_state?
-        new_state[node.output] = np.asarray(node.func(t))
+    def step(node, state):
+        t = state[API.simulation_time]
+        state[node.output] = np.asarray(node.func(t))
 
 
 register_impl(simulator_python.Probe)
@@ -81,13 +81,14 @@ class LIFNeurons(ImplBase):
 
     @staticmethod
     def step(self, state):
-        alpha, j_bias, voltage, refractory_time, input_current = [
+        alpha, j_bias, voltage, refractory_time = [
             state[self.inputs[name]] for name in self._input_names]
 
-        if input_current is None:
+        try:
+            J = j_bias + state[self.inputs['input_current']]
+        except KeyError:
             J  = j_bias 
-        else:
-            J  = j_bias + input_current
+
 
         tau_rc = self.tau_rc
         tau_ref = self.tau_ref
