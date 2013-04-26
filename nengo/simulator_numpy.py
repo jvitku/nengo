@@ -238,77 +238,6 @@ class LIFNeurons(ImplBase):
 
 
 @register_impl
-class NeuronEnsemble(ImplBase):
-    @staticmethod
-    def build(self, state, dt):
-        # -- neurons are not known to the simulator, so build them directly
-        build(self.neurons, state, dt)
-
-        # N.B. re-use neurons rng
-        rng = state[self.neurons.rng]
-
-        encoders = rng.randn(self.neurons.size, self.dimensions)
-
-        encoders = self.make_encoders(encoders=self.encoders)
-        norm = np.sum(encoders * encoders, axis=1).reshape(
-            (self.neuron_model.size, 1))
-        encoders = encoders / np.sqrt(norm) * neuron_model.alpha[: None]
-
-        state[self.encoders] = encoders
-
-    @staticmethod
-    def reset(self, state):
-        reset(self.neurons, state)
-
-    @staticmethod
-    def step(self, old_state, new_state):
-        
-        step(self.neurons, old_state, new_state)
-        # find the total input current to this population of neurons
-        
-        # apply respective biases to neurons in the population 
-        J = np.zeros((self.neuron_model.size, 1))
-        J += self.neuron_model.j_bias
-
-        #add in neuron->neuron currents
-        for c in self.neuron_inputs:
-            # add its values directly to the input current
-            J += c.get_post_input(old_state, dt)
-
-        #add in vector->vector currents
-        for c in self.vector_inputs:
-            fuck = c.get_post_input(old_state, dt) 
-            J += np.dot( self.encoders, 
-                c.get_post_input(old_state, dt)).reshape(
-                (self.neuron_model.size, 1))
-
-        # if noise has been specified for this neuron,
-        if self.noise: 
-            # generate random noise values, one for each input_current element, 
-            # with standard deviation = sqrt(self.noise=std**2)
-            # When simulating white noise, the noise process must be scaled by
-            # sqrt(dt) instead of dt. Hence, we divide the std by sqrt(dt).
-            if self.noise.type == 'gaussian':
-                J += random.gaussian(
-                    size=self.bias.shape, std=np.sqrt(self.noise/dt))
-            '''elif self.noise.type == 'uniform':
-                J += random.uniform(
-                    size=self.bias.shape, 
-                    low=-self.noise / np.sqrt(dt), 
-                    high=self.noise / np.sqrt(dt))'''
-        
-        # pass the input current total into the neuron model
-        self.spikes = self.neuron_model._step(new_state, J, dt)
-    
-        # update the weight matrices on learned terminations
-        for c in self.vector_inputs+self.neuron_inputs:
-            c.learn(dt)
-
-        # compute the decoded origin decoded_input from the neuron output
-        for i,o in enumerate(self.outputs):
-            new_state[o] = np.dot(self.neuron_model.output, self.decoders[i])
-
-@register_impl
 class Connection(ImplBase):
     @staticmethod
     def build(self, state, dt):
@@ -379,4 +308,80 @@ class hPES_Connection(ImplBase):
         state[self.src_filtered] = new_src
         state[self.dst_filtered] = new_dst
         state[self.theta] = new_theta
+
+
+
+
+
+
+
+class NeuronEnsemble(ImplBase):
+    @staticmethod
+    def build(self, state, dt):
+        # -- neurons are not known to the simulator, so build them directly
+        build(self.neurons, state, dt)
+
+        # N.B. re-use neurons rng
+        rng = state[self.neurons.rng]
+
+        encoders = rng.randn(self.neurons.size, self.dimensions)
+
+        encoders = self.make_encoders(encoders=self.encoders)
+        norm = np.sum(encoders * encoders, axis=1).reshape(
+            (self.neuron_model.size, 1))
+        encoders = encoders / np.sqrt(norm) * neuron_model.alpha[: None]
+
+        state[self.encoders] = encoders
+
+    @staticmethod
+    def reset(self, state):
+        reset(self.neurons, state)
+
+    @staticmethod
+    def step(self, old_state, new_state):
+        
+        step(self.neurons, old_state, new_state)
+        # find the total input current to this population of neurons
+        
+        # apply respective biases to neurons in the population 
+        J = np.zeros((self.neuron_model.size, 1))
+        J += self.neuron_model.j_bias
+
+        #add in neuron->neuron currents
+        for c in self.neuron_inputs:
+            # add its values directly to the input current
+            J += c.get_post_input(old_state, dt)
+
+        #add in vector->vector currents
+        for c in self.vector_inputs:
+            fuck = c.get_post_input(old_state, dt) 
+            J += np.dot( self.encoders, 
+                c.get_post_input(old_state, dt)).reshape(
+                (self.neuron_model.size, 1))
+
+        # if noise has been specified for this neuron,
+        if self.noise: 
+            # generate random noise values, one for each input_current element, 
+            # with standard deviation = sqrt(self.noise=std**2)
+            # When simulating white noise, the noise process must be scaled by
+            # sqrt(dt) instead of dt. Hence, we divide the std by sqrt(dt).
+            if self.noise.type == 'gaussian':
+                J += random.gaussian(
+                    size=self.bias.shape, std=np.sqrt(self.noise/dt))
+            '''elif self.noise.type == 'uniform':
+                J += random.uniform(
+                    size=self.bias.shape, 
+                    low=-self.noise / np.sqrt(dt), 
+                    high=self.noise / np.sqrt(dt))'''
+        
+        # pass the input current total into the neuron model
+        self.spikes = self.neuron_model._step(new_state, J, dt)
+    
+        # update the weight matrices on learned terminations
+        for c in self.vector_inputs+self.neuron_inputs:
+            c.learn(dt)
+
+        # compute the decoded origin decoded_input from the neuron output
+        for i,o in enumerate(self.outputs):
+            new_state[o] = np.dot(self.neuron_model.output, self.decoders[i])
 
