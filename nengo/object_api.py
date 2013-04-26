@@ -30,13 +30,13 @@ class Uniform(Distribution):
         self.low = low
         self.high = high
         self.seed = seed
-        self.rng = Var()
 
 
 class Gaussian(Distribution):
-    def __init__(self, mean, std):
+    def __init__(self, mean, std, seed=None):
         self.mean = mean
         self.std = std
+        self.seed = seed
 
 #
 # Top-level objects and containers
@@ -142,11 +142,11 @@ class Filter(Node):
 
 
 class Adder(Node):
-    def __init__(self, *args):
+    def __init__(self, size, args=()):
         Node.__init__(self)
         for ii, arg in enumerate(args):
             self.inputs[str(ii)] = arg
-        self.outputs['X'] = Var()
+        self.outputs['X'] = Var(size=size)
 
     def add_to_network(self, network):
         network.filters.append(self)

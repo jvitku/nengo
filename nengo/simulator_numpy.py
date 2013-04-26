@@ -48,7 +48,7 @@ def draw(dist, rng, N):
     if dist.dist_name == 'uniform':
         return rng.uniform(dist.low, dist.high, size=N)
     elif dist.dist_name == 'gaussian':
-        return rng.normal(mu=dist.mean, std=dist.std, size=N)
+        return rng.normal(loc=dist.mean, scale=dist.std, size=N)
     else:
         raise NotImplementedError()
 
@@ -223,6 +223,21 @@ class Filter(ImplBase):
         X_prev = state[self.inputs['X_prev']]
         var = state[self.inputs['var']]
         state[self.output] = X_prev + self.tau * var
+
+
+@register_impl
+class Adder(ImplBase):
+    @staticmethod
+    def reset(self, state):
+        state[self.output] = np.zeros(self.output.size)
+
+    @staticmethod
+    def step(self, state):
+        output = np.zeros(self.output.size)
+        for key, var in self.inputs.items():
+            output += state[var]
+        state[self.output] = output
+
 
 @register_impl
 class RandomConnection(ImplBase):
