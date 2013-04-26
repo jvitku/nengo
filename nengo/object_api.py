@@ -34,6 +34,9 @@ class Gaussian(Distribution):
         self.mean = mean
         self.std = std
 
+#
+# Top-level objects and containers
+#
 
 class Var(object):
     def __init__(self, name=None, size=1, dtype=float, shape=None):
@@ -79,6 +82,7 @@ class Node(object):
     def add_to_network(self, network):
         network.nodes.append(self)
 
+
 class Probe(Node):
     def __init__(self, target):
         Node.__init__(self)
@@ -98,7 +102,8 @@ class Probe(Node):
 
 
 class Filter(Node):
-    def __init__(self, var, tau):
+    tau=.02
+    def __init__(self, var, tau=tau):
         """
         tau: float
         """
@@ -111,7 +116,7 @@ class Filter(Node):
         network.filters.append(self)
 
 
-class Connection(object):
+class Connection(Node):
     def __init__(self, src, dst):
         """
         Parameters
@@ -119,8 +124,7 @@ class Connection(object):
         :param Var src:
         :param Var dst: 
         """
-        self.inputs = OrderedDict()
-        self.outputs = OrderedDict()
+        Node.__init__(self)
         self.inputs['X'] = src
         self.outputs['X'] = dst
 
@@ -179,17 +183,21 @@ class Network(object):
         return rval
 
 
-
+#
+# Neuron Nodes
+#
 
 
 class Neurons(Node):
-    def __init__(self, size, input_current):
+    def __init__(self, size, input_current=None):
         """
         :param int size:
         :param Var input_current:
         """
         Node.__init__(self)
         self.size = size
+        if input_current is None:
+            input_current = Var()
         self.inputs['input_current'] = input_current
         self.outputs['X'] = Var()
 
@@ -200,6 +208,11 @@ class Neurons(Node):
     @input_current.setter
     def input_current(self, val):
         self.inputs['input_current'] = val
+
+
+class LinearNeurons(Neurons):
+    """Neurons that just relay input current -> output
+    """
 
 
 class LIFNeurons(Neurons):
@@ -218,18 +231,16 @@ class LIFNeurons(Neurons):
         :param float tau_ref: refractory period length (s)
 
         """
-        if input_current is None:
-            input_current = Var()
         Neurons.__init__(self, size, input_current)
         self.tau_rc = tau_rc
         self.tau_ref = tau_ref
         self.max_rate = max_rate
         self.intercept = intercept
         self.seed = seed
-        self.alpha = Var()
-        self.j_bias = Var()
-        self.voltage = Var()
-        self.refractory_time = Var()
+        self.alpha = Var(size=size)
+        self.j_bias = Var(size=size)
+        self.voltage = Var(size=size)
+        self.refractory_time = Var(size=size)
 
     # TODO: Python magic to support
     # alpha = inputs_getter_setter('alpha')
@@ -267,12 +278,9 @@ class LIFNeurons(Neurons):
         self.inputs['refractory_time'] = val
 
 
-
-
-class NetworkMember(object):
-    def add_to_network(self, network):
-        raise NotImplementedError('override in subclass')
-
+#
+# Function Nodes
+#
 
 
 class TimeNode(Node):
@@ -298,11 +306,34 @@ class PiecewiseNode(Node):
         self.table = table
 
 
+#
+# Connections
+#
+
+class RandomConnection(Connection):
+    def __init__(self, src, dst, dist):
+        Connection.__init__(self, src, dst)
+        self.dist = dist
+
 
 class LearnedConnection(Connection):
-    def __init__(self, src, dst, error_signal):
+    def __init__(self, src, dst):
         Connection.__init__(self, src, dst)
-        self.error_signal = error_signal
+        self.outputs['error_signal'] = Var()
+
+    @property
+    def error_signal(self):
+        return self.outputs['error_signal']
+
+
+class MSE_MinimizingConnection(LearnedConnection):
+    def __init__(self, src, dst, target):
+        LearnedConnection.__init__(src, dst)
+        self.inputs['target'] = target
+
+    @property
+    def target(self):
+        return self.inputs['target']
 
 
 class hPES_Connection(LearnedConnection):
@@ -328,6 +359,10 @@ class hPES_Connection(LearnedConnection):
         self.weight_matrix = Var()
         self.supervised_learning_rate = Var()
 
+
+#
+# Simulator
+#
 
 simulation_time = Var('time')
 simulation_stop_now = Var('stop_when')

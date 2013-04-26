@@ -5,110 +5,24 @@ import numpy as np
 
 import object_api as API
 import simulator_python
-
-impl_registry = {}
-
-build_registry = {}
-reset_registry = {}
-step_registry = {}
-probe_registry = {}
-sample_registry = {}
-
-build = partial(simulator_python.call_registry, reg=build_registry)
-reset = partial(simulator_python.call_registry, reg=reset_registry)
-step = partial(simulator_python.call_registry, reg=step_registry)
+from simulator_python import ImplBase
 
 
-def register_impl(cls):
-    api_cls = getattr(API, cls.__name__)
-    build_registry[api_cls] = cls.build
-    reset_registry[api_cls] = cls.reset
-    step_registry[api_cls] = cls.step
-    probe_registry[api_cls] = cls.probe
-    sample_registry[api_cls] = cls.sample
-    return cls
+class Simulator(simulator_python.Simulator):
 
+    # These classes create a new registry (distinct from parent class)
+    impl_registry = {}
+    build_registry = {}
+    reset_registry = {}
+    step_registry = {}
+    probe_registry = {}
+    sample_registry = {}
 
-class ImplBase(object):
-    @staticmethod
-    def build(obj, state, dt):
-        pass
-    @staticmethod
-    def reset(obj, state):
-        pass
-    @staticmethod
-    def step(obj, old_state, new_state):
-        pass
-    @staticmethod
-    def probe(obj, state):
-        pass
-    @staticmethod
-    def sample(obj, N):
-        pass
-
-
-class Simulator(API.SimulatorBase):
     def __init__(self, network, dt, verbosity=0):
-        API.SimulatorBase.__init__(self, network)
-        self.state = {}
-        self.dt = dt
-        self.verbosity = verbosity
-        self.state[API.simulation_time] = self.simulation_time
-        for member in self.network.all_members:
-            build_fn = build_registry.get(type(member), None)
-            if build_fn:
-                if verbosity:
-                    print 'Build:', member, build_fn, verbosity
-                build_fn(member, self.state, self.dt)
-            elif verbosity:
-                print 'No build:', member
-        self.reset()
-
-    def reset(self):
-        API.SimulatorBase.reset(self)
-        self.state[API.simulation_time] = self.simulation_time
-        for member in self.network.all_members:
-            reset_fn = reset_registry.get(type(member), None)
-            if reset_fn:
-                if self.verbosity:
-                    print 'Reset:', member, reset_fn
-                reset_fn(member, self.state)
-            elif self.verbosity:
-                print 'No reset:', member
-
-    def run_steps(self, steps):
-        old_state = self.state
-        step_fns = []
-        for member in self.network.all_members:
-            step_fn = step_registry.get(type(member), None)
-            if step_fn:
-                if self.verbosity:
-                    print 'Step:', member, step_fn
-                step_fns.append((step_fn, member))
-            elif self.verbosity:
-                print 'No step:', member
-
-        for tt in xrange(steps):
-            self.simulation_time += self.dt
-            new_state = {}
-            new_state[API.simulation_time] = self.simulation_time
-            for step_fn, member in step_fns:
-                step_fn(member, old_state, new_state)
-            old_state = new_state
-        self.state = new_state
-
-        rval = {}
-        for probe in self.network.all_probes:
-            # -- probe_fn is mandatory
-            probe_fn = probe_registry[type(probe)]
-            rval[probe.target] = probe_fn(probe, self.state)
-        return rval
-
-    def run(self, sim_time):
-        steps = int(sim_time / self.dt)
-        return self.run_steps(steps)
+        simulator_python.Simulator.__init__(self, network, dt, verbosity)
 
 API.SimulatorBase._backends['numpy'] = Simulator
+register_impl = Simulator.register_impl
 
 
 @register_impl
@@ -130,44 +44,24 @@ class TimeNode(ImplBase):
 register_impl(simulator_python.Probe)
 
 
-@register_impl
-class Uniform(ImplBase):
-    @staticmethod
-    def build(dist, state, dt):
-        rng = np.random.RandomState(dist.seed)
-        def draw_n(N):
-            return rng.uniform(dist.low, dist.high, size=N)
-        state[dist.rng] = draw_n
-
-    @staticmethod
-    def step(obj, old_state, new_state):
-        new_state[obj.rng] = old_state[obj.rng]
-
-
-@register_impl
-class Gaussian(ImplBase):
-    @staticmethod
-    def build(dist, state, dt):
-        rng = np.random.RandomState(dist.seed)
-        def draw_n(N):
-            return rng.normal(mu=dist.mean, std=dist.std, size=N)
-        state[dist.rng] = draw_n
-
-    @staticmethod
-    def step(obj, old_state, new_state):
-        new_state[obj.rng] = old_state[obj.rng]
-
+def draw(dist, rng, N):
+    if dist.dist_name == 'uniform':
+        return rng.uniform(dist.low, dist.high, size=N)
+    elif dist.dist_name == 'gaussian':
+        return rng.normal(mu=dist.mean, std=dist.std, size=N)
+    else:
+        raise NotImplementedError()
 
 
 @register_impl
 class LIFNeurons(ImplBase):
     @staticmethod
     def build(neurons, state, dt):
-        build(neurons.max_rate, state, dt)
-        build(neurons.intercept, state, dt)
+        r1 = np.random.RandomState(neurons.max_rate.seed)
+        r2 = np.random.RandomState(neurons.intercept.seed)
 
-        max_rates = state[neurons.max_rate.rng](neurons.size)
-        threshold = state[neurons.intercept.rng](neurons.size)
+        max_rates = draw(neurons.max_rate, r1, neurons.size)
+        threshold = draw(neurons.intercept, r2, neurons.size)
         
         u = neurons.tau_ref - (1.0 / max_rates)
         x = 1.0 / (1 - np.exp(u / neurons.tau_rc))
@@ -188,7 +82,11 @@ class LIFNeurons(ImplBase):
     def step(neurons, old_state, new_state):
         alpha = old_state[neurons.alpha]
         j_bias = old_state[neurons.j_bias]
-        J  = j_bias + old_state[neurons.input_current]
+        # XXX why this one should be new_state?
+        if neurons.input_current in new_state:
+            J  = j_bias + new_state[neurons.input_current]
+        else:
+            J  = j_bias 
         voltage = old_state[neurons.voltage]
         refractory_time = old_state[neurons.refractory_time]
         tau_rc = neurons.tau_rc
@@ -240,13 +138,16 @@ class LIFNeurons(ImplBase):
 @register_impl
 class Connection(ImplBase):
     @staticmethod
-    def build(self, state, dt):
-        # compute the decoded origin decoded_input from the neuron output
-        for i,o in enumerate(self.outputs):
-            state[o] = np.zeros((self.neuron_model.size, 1))
-            self.decoders += [
-                self.compute_decoders(func=self.output_funcs[i], 
-                dt=dt, eval_points=self.eval_points) ]
+    def reset(self, state):
+        src = state[self.inputs['X']]
+        dst = src.copy()
+        state[self.outputs['X']] = dst
+
+    @staticmethod
+    def step(self, old_state, new_state):
+        src = new_state[self.inputs['X']]
+        dst = src.copy()
+        new_state[self.outputs['X']] = dst
 
 
 @register_impl
@@ -310,6 +211,17 @@ class hPES_Connection(ImplBase):
         state[self.theta] = new_theta
 
 
+@register_impl
+class Filter(ImplBase):
+    @staticmethod
+    def reset(self, state):
+        state[self.output] = np.zeros(self.output.size)
+
+    @staticmethod
+    def step(self, old_state, new_state):
+        new_state[self.output] = (
+            old_state[self.output]
+            + self.tau * old_state[self.inputs['var']])
 
 
 

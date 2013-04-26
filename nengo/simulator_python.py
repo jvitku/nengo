@@ -8,50 +8,16 @@ import networkx as nx
 
 import object_api as API
 
-impl_registry = {}
 
-build_registry = {}
-reset_registry = {}
-step_registry = {}
-probe_registry = {}
-sample_registry = {}
+class SimulatorException(Exception):
+    pass
 
+class ResetIncomplete(SimulatorException):
+    pass
 
-def call_registry(obj, *args, **kwargs):
-    reg = kwargs.pop('reg')
-    return reg[type(obj)](obj, *args, **kwargs)
+class StepIncomplete(SimulatorException):
+    pass
 
-build = partial(call_registry, reg=build_registry)
-reset = partial(call_registry, reg=reset_registry)
-step = partial(call_registry, reg=step_registry)
-
-
-def register_impl(cls):
-    api_cls = getattr(API, cls.__name__)
-    build_registry[api_cls] = cls.build
-    reset_registry[api_cls] = cls.reset
-    step_registry[api_cls] = cls.step
-    probe_registry[api_cls] = cls.probe
-    sample_registry[api_cls] = cls.sample
-    return cls
-
-
-class ImplBase(object):
-    @staticmethod
-    def build(obj, state, dt):
-        pass
-    @staticmethod
-    def reset(obj, state):
-        pass
-    @staticmethod
-    def step(obj, old_state, new_state):
-        pass
-    @staticmethod
-    def probe(obj, state):
-        pass
-    @staticmethod
-    def sample(obj, N):
-        pass
 
 def scheduling_graph(network):
     all_members = network.all_members
@@ -72,8 +38,43 @@ def scheduling_graph(network):
     return DG
 
 
+class ImplBase(object):
+    @staticmethod
+    def build(obj, state, dt):
+        pass
+    @staticmethod
+    def reset(obj, state):
+        pass
+    @staticmethod
+    def step(obj, old_state, new_state):
+        pass
+    @staticmethod
+    def probe(obj, state):
+        pass
+    @staticmethod
+    def sample(obj, N):
+        pass
+
 
 class Simulator(API.SimulatorBase):
+
+    impl_registry = {}
+    build_registry = {}
+    reset_registry = {}
+    step_registry = {}
+    probe_registry = {}
+    sample_registry = {}
+
+    @classmethod
+    def register_impl(mycls, cls):
+        api_cls = getattr(API, cls.__name__)
+        mycls.build_registry[api_cls] = cls.build
+        mycls.reset_registry[api_cls] = cls.reset
+        mycls.step_registry[api_cls] = cls.step
+        mycls.probe_registry[api_cls] = cls.probe
+        mycls.sample_registry[api_cls] = cls.sample
+        return cls
+
     def __init__(self, network, dt, verbosity=0):
         API.SimulatorBase.__init__(self, network)
         self.state = {}
@@ -93,7 +94,7 @@ class Simulator(API.SimulatorBase):
                               if not isinstance(n, API.Var)]
 
         for member in self.member_ordering:
-            build_fn = build_registry.get(type(member), None)
+            build_fn = self.build_registry.get(type(member), None)
             if build_fn:
                 if verbosity:
                     print 'Build:', member, build_fn, verbosity
@@ -106,7 +107,7 @@ class Simulator(API.SimulatorBase):
         API.SimulatorBase.reset(self)
         self.state[API.simulation_time] = self.simulation_time
         for member in self.member_ordering:
-            reset_fn = reset_registry.get(type(member), None)
+            reset_fn = self.reset_registry.get(type(member), None)
             if reset_fn:
                 if self.verbosity:
                     print 'Reset:', member, reset_fn
@@ -118,7 +119,7 @@ class Simulator(API.SimulatorBase):
         old_state = self.state
         step_fns = []
         for member in self.member_ordering:
-            step_fn = step_registry.get(type(member), None)
+            step_fn = self.step_registry.get(type(member), None)
             if step_fn:
                 if self.verbosity:
                     print 'Step:', member, step_fn
@@ -132,13 +133,17 @@ class Simulator(API.SimulatorBase):
             new_state[API.simulation_time] = self.simulation_time
             for step_fn, member in step_fns:
                 step_fn(member, old_state, new_state)
+                #for key, val in member.outputs.items():
+                    #if val not in new_state:
+                        #raise StepIncomplete("Step %s did not produce outputs[%s]" % (
+                            #member, key))
             old_state = new_state
         self.state = new_state
 
         rval = {}
         for probe in self.network.all_probes:
             # -- probe_fn is mandatory
-            probe_fn = probe_registry[type(probe)]
+            probe_fn = self.probe_registry[type(probe)]
             rval[probe.target] = probe_fn(probe, self.state)
         return rval
 
@@ -147,12 +152,12 @@ class Simulator(API.SimulatorBase):
         return self.run_steps(steps)
 
 API.SimulatorBase._backends['reference'] = Simulator
+register_impl = Simulator.register_impl
 
 
 #
 # Pure Python Object API implementation
 #
-
 
 @register_impl
 class TimeNode(ImplBase):

@@ -11,8 +11,8 @@ from nengo.object_api import (
 import test_object_api
 
 class NumpySimulatorSmokeTests(test_object_api.ObjectAPISmokeTests):
-    pass
-
+    def Simulator(self, *args, **kwargs):
+        return Simulator(backend='numpy', *args, **kwargs)
 
 
 def foo_smoke_3():
