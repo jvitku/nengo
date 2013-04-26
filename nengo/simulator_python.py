@@ -18,6 +18,10 @@ class ResetIncomplete(SimulatorException):
 class StepIncomplete(SimulatorException):
     pass
 
+class SizeError(SimulatorException):
+    """Implementation produced output of incorrect size"""
+
+
 
 def scheduling_graph(network):
     all_members = network.all_members
@@ -65,6 +69,7 @@ class SimulatorState(object):
     def __init__(self):
         self.new_state = {}
         self.old_state = {}
+        self.probes = {}
 
     def __contains__(self, item):
         return item in self.new_state
@@ -90,7 +95,6 @@ class Simulator(API.SimulatorBase):
     build_registry = {}
     reset_registry = {}
     step_registry = {}
-    probe_registry = {}
     sample_registry = {}
 
     @classmethod
@@ -99,7 +103,6 @@ class Simulator(API.SimulatorBase):
         mycls.build_registry[api_cls] = cls.build
         mycls.reset_registry[api_cls] = cls.reset
         mycls.step_registry[api_cls] = cls.step
-        mycls.probe_registry[api_cls] = cls.probe
         mycls.sample_registry[api_cls] = cls.sample
         return cls
 
@@ -171,14 +174,20 @@ class Simulator(API.SimulatorBase):
                     raise
                 for key, val in member.outputs.items():
                     if val not in self.state:
-                        raise StepIncomplete("Reset %s did not produce outputs[%s]" % (
+                        raise StepIncomplete("Step %s did not produce outputs[%s]" % (
                             member, key))
+                    if self.state[val].size != val.size:
+                        raise SizeError(
+                            "Step %s produced outputs[%s] of wrong size %i, which"
+                            " should have been %i" % (
+                            member, key, self.state[val].size, val.size))
 
         rval = {}
         for probe in self.network.all_probes:
             # -- probe_fn is mandatory
-            probe_fn = self.probe_registry[type(probe)]
-            rval[probe.target] = probe_fn(probe, self.state)
+            rval[probe.target] = self.state.probes[probe]
+            self.state.probes[probe] = []
+
         return rval
 
     def run(self, sim_time):
@@ -213,20 +222,12 @@ class TimeNode(ImplBase):
 class Probe(ImplBase):
     @staticmethod
     def reset(probe, state):
-        val0 = copy.deepcopy(state[probe.target])
-        state[probe.stats] = [val0]
+        state.probes[probe] = []
 
     @staticmethod
     def step(probe, state):
-        stats = state[probe.stats.delayed()]
-        stats.append(copy.deepcopy(state[probe.target]))
-        state[probe.stats] = stats
-
-    @staticmethod
-    def probe(probe, state):
-        rval = state[probe.stats]
-        state[probe.stats] = []
-        return rval
+        obj = copy.deepcopy(state[probe.target])
+        state.probes[probe].append(obj)
 
 
 @register_impl

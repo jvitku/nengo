@@ -7,7 +7,6 @@ from nengo import object_api as API
 from nengo.object_api import (
     Connection,
     Filter,
-    LinearNeurons,
     LIFNeurons,
     MSE_MinimizingConnection,
     Network,
@@ -117,19 +116,29 @@ class ObjectAPISmokeTests(unittest.TestCase):
 
     def test_learning(self):
         net = Network()
-        net.add(Probe(simulation_time))
-
         tn = net.add(TimeNode(sin, name='sin'))
-        ens1 = net.add(LIFNeurons(13))
-        latent1 = net.add(LinearNeurons(1))
+
+        ens1 = net.add(
+            LIFNeurons(50))
         conn = net.add(
-                MSE_MinimizingConnection(
-                    ens1.output,
-                    latent1.input_current,
-                    target=tn.output))
-        net.add(Probe(conn.error_signal))
+            MSE_MinimizingConnection(
+                ens1.output,
+                API.Var(name='sin_prediction', size=1),
+                target=tn.output,
+                learning_rate=0.03))
+        rec = net.add(
+            API.RandomConnection(
+                ens1.output,
+                ens1.input_current,
+                API.Uniform(-.12, .12, seed=123)
+                ))
+
+        err_probe = net.add(Probe(conn.error_signal))
+        sin_probe = net.add(Probe(tn.output))
 
         sim = self.Simulator(net, dt=0.001, verbosity=0)
-        results = sim.run(.1)
-        print results
+        for i in range(10):
+            results = sim.run(1.0)
+            print sum(results[err_probe.target]),
+            print sum([x ** 2 for x in results[sin_probe.target]])
 

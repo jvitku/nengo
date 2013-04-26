@@ -224,36 +224,54 @@ class Filter(ImplBase):
         var = state[self.inputs['var']]
         state[self.output] = X_prev + self.tau * var
 
-
 @register_impl
-class LinearNeurons(ImplBase):
+class RandomConnection(ImplBase):
     @staticmethod
     def reset(self, state):
-        state[self.outputs['X']] = np.array(
-            state[self.inputs['input_current']])
+        # RNG: need seed
+        n_in = self.src.size
+        n_out = self.dst.size
+        weights = draw(self.dist, np.random.RandomState(self.dist.seed),
+                       n_out * n_in).reshape(n_out, n_in)
+
+        state[self.outputs['X']] = np.zeros(n_out)
+        state[self.outputs['weights']] = weights
 
     @staticmethod
-    def step(self, old_state, new_state):
-        state[self.outputs['X']] = np.array(
-            state[self.inputs['input_current']])
+    def step(self, state):
+        src = state[self.inputs['X']]
+        weights = state[self.inputs['weights']]
+        state[self.output] = np.dot(weights, src)
+        state[self.outputs['weights']] = weights
 
 
 @register_impl
 class MSE_MinimizingConnection(ImplBase):
     @staticmethod
     def reset(self, state):
-        state[self.outputs['X']] = np.asarray([0])
-        state[self.outputs['error_signal']] = np.zeros_like(
-                state[self.inputs['target']])
+        # RNG: need seed
+        n_in = self.src.size
+        n_out = self.dst.size
+        weights = np.random.randn(n_out, n_in)
+
+        state[self.outputs['X']] = np.zeros(n_out)
+        state[self.outputs['error_signal']] = np.zeros(n_out)
+        state[self.outputs['weights']] = weights
 
     @staticmethod
-    def step(self, old_state, new_state):
+    def step(self, state):
         src = state[self.inputs['X']]
         target = state[self.inputs['target']]
+        weights = state[self.inputs['weights']]
 
-        state[self.outputs['X']] = np.asarray([0])
-        state[self.outputs['error_signal']] = np.zeros_like(
-                state[self.inputs['target']])
+        prediction = np.dot(weights, src)
+
+        grad = target - prediction
+        weights = weights + np.outer(grad, src) * self.learning_rate
+
+        state[self.outputs['X']] = prediction
+        state[self.outputs['error_signal']] = ((grad) ** 2).sum()
+        state[self.outputs['weights']] = weights
 
 
 

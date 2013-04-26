@@ -63,7 +63,6 @@ class Var(object):
         self.dtype = dtype
         self.shape = shape
 
-
     def __str__(self):
         clsname = self.__class__.__name__
         if self.name:
@@ -117,16 +116,10 @@ class Probe(Node):
     def __init__(self, target):
         Node.__init__(self)
         self.inputs['target'] = target
-        self.outputs['stats'] = Var() # -- no default output
-        self.inputs['stats'] = self.outputs['stats'].delayed()
 
     @property
     def target(self):
         return self.inputs['target']
-
-    @property
-    def stats(self):
-        return self.outputs['stats']
 
     def add_to_network(self, network):
         network.probes.append(self)
@@ -148,6 +141,17 @@ class Filter(Node):
         network.filters.append(self)
 
 
+class Adder(Node):
+    def __init__(self, *args):
+        Node.__init__(self)
+        for ii, arg in enumerate(args):
+            self.inputs[str(ii)] = arg
+        self.outputs['X'] = Var()
+
+    def add_to_network(self, network):
+        network.filters.append(self)
+
+
 class Connection(Node):
     def __init__(self, src, dst):
         """
@@ -162,6 +166,14 @@ class Connection(Node):
 
     def add_to_network(self, network):
         network.connections.append(self)
+
+    @property
+    def src(self):
+        return self.inputs['X']
+
+    @property
+    def dst(self):
+        return self.outputs['X']
 
 
 class Network(object):
@@ -232,17 +244,12 @@ class Neurons(Node):
             input_current = Var(name='input_current', size=size)
         self._input_current = input_current
         self.inputs['input_current'] = input_current.delayed()
-        self.outputs['X'] = Var()
+        self.outputs['X'] = Var(size=size)
 
     @property
     def input_current(self):
         # -- TODO setting this requires re-assigning the delayed view too
         return self._input_current
-
-
-class LinearNeurons(Neurons):
-    """Neurons that just relay input current -> output
-    """
 
 
 class LIFNeurons(Neurons):
@@ -329,6 +336,9 @@ class RandomConnection(Connection):
     def __init__(self, src, dst, dist):
         Connection.__init__(self, src, dst)
         self.dist = dist
+        self.outputs['weights'] = Var(size=src.size * dst.size,
+                                      shape=(dst.size, src.size))
+        self.inputs['weights'] = self.outputs['weights'].delayed()
 
 
 class LearnedConnection(Connection):
@@ -342,10 +352,13 @@ class LearnedConnection(Connection):
 
 
 class MSE_MinimizingConnection(LearnedConnection):
-    def __init__(self, src, dst, target):
+    def __init__(self, src, dst, target, learning_rate=0.01):
         LearnedConnection.__init__(self, src, dst)
         self.inputs['target'] = target
-        self.outputs['weight'] = Var()
+        self.outputs['weights'] = Var(size=src.size * dst.size,
+                                      shape=(dst.size, src.size))
+        self.inputs['weights'] = self.outputs['weights'].delayed()
+        self.learning_rate = learning_rate
 
     @property
     def target(self):
