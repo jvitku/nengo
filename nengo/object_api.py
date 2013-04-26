@@ -15,6 +15,10 @@ class SelfDependencyError(Exception):
     node's own output on the same time-step."""
 
 
+class MultipleSourceError(Exception):
+    """A variable at time t cannot be the output of multiple nodes"""
+
+
 class Distribution(object):
     @property
     def dist_name(self):
@@ -69,6 +73,31 @@ class Var(object):
     def __repr__(self):
         return str(self)
 
+    def delayed(self, delay=1):
+        return DelayedVar(self, delay)
+
+
+class DelayedVar(object):
+    def __init__(self, var, delay):
+        self.var = var
+        self.delay = delay
+
+    @property
+    def name(self):
+        return "%s(delay=%i)" % (self.var.name, self.delay)
+
+    @property
+    def size(self):
+        return self.var.size
+
+    @property
+    def dtype(self):
+        return self.var.dtype
+
+    @property
+    def shape(self):
+        return self.var.shape
+
 
 class Node(object):
     def __init__(self):
@@ -88,6 +117,7 @@ class Probe(Node):
         Node.__init__(self)
         self.inputs['target'] = target
         self.outputs['stats'] = Var() # -- no default output
+        self.inputs['stats'] = self.outputs['stats'].delayed()
 
     @property
     def target(self):
@@ -109,8 +139,9 @@ class Filter(Node):
         """
         Node.__init__(self)
         self.tau = tau
-        self.inputs['var'] = var
         self.outputs['X'] = Var()
+        self.inputs['X_prev'] = self.outputs['X'].delayed()
+        self.inputs['var'] = var
 
     def add_to_network(self, network):
         network.filters.append(self)
@@ -198,16 +229,14 @@ class Neurons(Node):
         self.size = size
         if input_current is None:
             input_current = Var()
-        self.inputs['input_current'] = input_current
+        self._input_current = input_current
+        self.inputs['input_current'] = input_current.delayed()
         self.outputs['X'] = Var()
 
     @property
     def input_current(self):
-        return self.inputs['input_current']
-
-    @input_current.setter
-    def input_current(self, val):
-        self.inputs['input_current'] = val
+        # -- TODO setting this requires re-assigning the delayed view too
+        return self._input_current
 
 
 class LinearNeurons(Neurons):
@@ -216,6 +245,9 @@ class LinearNeurons(Neurons):
 
 
 class LIFNeurons(Neurons):
+    _input_names = [
+        'alpha', 'j_bias', 'voltage', 'refractory_time', 'input_current']
+
     def __init__(self, size,
             input_current=None,
             tau_rc=0.02,
@@ -237,45 +269,29 @@ class LIFNeurons(Neurons):
         self.max_rate = max_rate
         self.intercept = intercept
         self.seed = seed
-        self.alpha = Var(size=size)
-        self.j_bias = Var(size=size)
-        self.voltage = Var(size=size)
-        self.refractory_time = Var(size=size)
 
-    # TODO: Python magic to support
-    # alpha = inputs_getter_setter('alpha')
+        for name in self._input_names:
+            if name in ('input_current',):
+                continue
+            self.outputs[name] = Var(size=size)
+            self.inputs[name] = self.outputs[name].delayed()
+
 
     @property
     def alpha(self):
-        return self.inputs['alpha']
-
-    @alpha.setter
-    def alpha(self, val):
-        self.inputs['alpha'] = val
+        return self.outputs['alpha']
 
     @property
     def j_bias(self):
-        return self.inputs['j_bias']
-
-    @j_bias.setter
-    def j_bias(self, val):
-        self.inputs['j_bias'] = val
+        return self.outputs['j_bias']
 
     @property
     def voltage(self):
-        return self.inputs['voltage']
-
-    @voltage.setter
-    def voltage(self, val):
-        self.inputs['voltage'] = val
+        return self.outputs['voltage']
 
     @property
     def refractory_time(self):
-        return self.inputs['refractory_time']
-
-    @refractory_time.setter
-    def refractory_time(self, val):
-        self.inputs['refractory_time'] = val
+        return self.outputs['refractory_time']
 
 
 #

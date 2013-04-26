@@ -10,7 +10,7 @@ from nengo.object_api import (
         )
 import test_object_api
 
-class NumpySimulatorSmokeTests(test_object_api.ObjectAPISmokeTests):
+class Smoke(test_object_api.ObjectAPISmokeTests):
     def Simulator(self, *args, **kwargs):
         return Simulator(backend='numpy', *args, **kwargs)
 

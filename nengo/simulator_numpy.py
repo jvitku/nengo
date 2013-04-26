@@ -77,21 +77,22 @@ class LIFNeurons(ImplBase):
         state[neurons.voltage] = np.zeros(neurons.size)
         state[neurons.refractory_time] = np.zeros(neurons.size)
         state[neurons.output] = np.zeros(neurons.size)
+        assert neurons.alpha in state
 
     @staticmethod
-    def step(neurons, old_state, new_state):
-        alpha = old_state[neurons.alpha]
-        j_bias = old_state[neurons.j_bias]
-        # XXX why this one should be new_state?
-        if neurons.input_current in new_state:
-            J  = j_bias + new_state[neurons.input_current]
-        else:
+    def step(self, state):
+        alpha, j_bias, voltage, refractory_time, input_current = [
+            state[self.inputs[name]] for name in self._input_names]
+
+        if input_current is None:
             J  = j_bias 
-        voltage = old_state[neurons.voltage]
-        refractory_time = old_state[neurons.refractory_time]
-        tau_rc = neurons.tau_rc
-        tau_ref = neurons.tau_ref
-        dt = new_state[API.simulation_time] - old_state[API.simulation_time]
+        else:
+            J  = j_bias + input_current
+
+        tau_rc = self.tau_rc
+        tau_ref = self.tau_ref
+        dt = state[API.simulation_time] - state[API.simulation_time.delayed()]
+
         # -- use the input_current that was computed by the connections
         # -- on the last time through
 
@@ -127,12 +128,11 @@ class LIFNeurons(ImplBase):
         new_voltage = v * (1 - spiked)
         new_output = spiked
 
-
-        new_state[neurons.alpha] = alpha
-        new_state[neurons.j_bias] = j_bias
-        new_state[neurons.voltage] = new_voltage
-        new_state[neurons.refractory_time] = new_refractory_time
-        new_state[neurons.output] = new_output
+        state[self.outputs['alpha']] = alpha
+        state[self.outputs['j_bias']] = j_bias
+        state[self.outputs['voltage']] = new_voltage
+        state[self.outputs['refractory_time']] = new_refractory_time
+        state[self.outputs['X']] = new_output
 
 
 @register_impl
@@ -144,10 +144,10 @@ class Connection(ImplBase):
         state[self.outputs['X']] = dst
 
     @staticmethod
-    def step(self, old_state, new_state):
-        src = new_state[self.inputs['X']]
+    def step(self, state):
+        src = state[self.inputs['X']]
         dst = src.copy()
-        new_state[self.outputs['X']] = dst
+        state[self.outputs['X']] = dst
 
 
 @register_impl
@@ -218,10 +218,10 @@ class Filter(ImplBase):
         state[self.output] = np.zeros(self.output.size)
 
     @staticmethod
-    def step(self, old_state, new_state):
-        new_state[self.output] = (
-            old_state[self.output]
-            + self.tau * old_state[self.inputs['var']])
+    def step(self, state):
+        X_prev = state[self.inputs['X_prev']]
+        var = state[self.inputs['var']]
+        state[self.output] = X_prev + self.tau * var
 
 
 @register_impl
@@ -247,8 +247,8 @@ class MSE_MinimizingConnection(ImplBase):
 
     @staticmethod
     def step(self, old_state, new_state):
-        src = state[self.inputs['X']])
-        target = state[self.inputs['target']])
+        src = state[self.inputs['X']]
+        target = state[self.inputs['target']]
 
         state[self.outputs['X']] = np.asarray([0])
         state[self.outputs['error_signal']] = np.zeros_like(

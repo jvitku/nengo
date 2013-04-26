@@ -22,19 +22,24 @@ class StepIncomplete(SimulatorException):
 def scheduling_graph(network):
     all_members = network.all_members
     DG = nx.DiGraph()
+    producer = {}
     for member in all_members:
-        if isinstance(member, API.Filter):
-            # -- filters take their inputs from the previous time step,
-            #    and they take no input from the current time step
-            pass
-        else:
-            # -- all other nodes take all inputs from the current time step
-            for key, val in member.inputs.items():
-                assert val, val
+        for key, val in member.inputs.items():
+            if val is None:
+                pass
+            elif isinstance(val, API.DelayedVar):
+                pass
+            else:
                 DG.add_edge(val, member)
         for key, val in member.outputs.items():
-            assert val, val
-            DG.add_edge(member, val)
+            if val is None:
+                raise ValueError('Output cannot be None', key)
+            elif isinstance(val, API.DelayedVar):
+                raise ValueError('Output cannot be delayed', key)
+            else:
+                if producer.setdefault(val, member) is not member:
+                    raise API.MultipleSourceError(val)
+                DG.add_edge(member, val)
     return DG
 
 
@@ -54,6 +59,29 @@ class ImplBase(object):
     @staticmethod
     def sample(obj, N):
         pass
+
+
+class SimulatorState(object):
+    def __init__(self):
+        self.new_state = {}
+        self.old_state = {}
+
+    def __contains__(self, item):
+        return item in self.new_state
+
+    def __getitem__(self, item):
+        try:
+            return self.old_state[item.var]
+        except AttributeError:
+            return self.new_state[item]
+
+    def __setitem__(self, item, val):
+        self.new_state[item] = val
+
+    def step(self):
+        self.old_state = self.new_state
+        self.new_state = {}
+
 
 
 class Simulator(API.SimulatorBase):
@@ -77,7 +105,7 @@ class Simulator(API.SimulatorBase):
 
     def __init__(self, network, dt, verbosity=0):
         API.SimulatorBase.__init__(self, network)
-        self.state = {}
+        self.state = SimulatorState()
         self.dt = dt
         self.verbosity = verbosity
         self.state[API.simulation_time] = self.simulation_time
@@ -120,7 +148,6 @@ class Simulator(API.SimulatorBase):
                         member, key))
 
     def run_steps(self, steps):
-        old_state = self.state
         step_fns = []
         for member in self.member_ordering:
             step_fn = self.step_registry.get(type(member), None)
@@ -133,16 +160,19 @@ class Simulator(API.SimulatorBase):
 
         for tt in xrange(steps):
             self.simulation_time += self.dt
-            new_state = {}
-            new_state[API.simulation_time] = self.simulation_time
+            self.state.step()
+            self.state[API.simulation_time] = self.simulation_time
             for step_fn, member in step_fns:
-                step_fn(member, old_state, new_state)
+                try:
+                    step_fn(member, self.state)
+                except TypeError, e:
+                    if "takes exactly" in str(e):
+                        e.args = e.args + (step_fn, 'of implementation for',  member)
+                    raise
                 for key, val in member.outputs.items():
-                    if val not in new_state:
+                    if val not in self.state:
                         raise StepIncomplete("Reset %s did not produce outputs[%s]" % (
                             member, key))
-            old_state = new_state
-        self.state = new_state
 
         rval = {}
         for probe in self.network.all_probes:
@@ -187,10 +217,10 @@ class Probe(ImplBase):
         state[probe.stats] = [val0]
 
     @staticmethod
-    def step(probe, old_state, new_state):
-        stats = old_state[probe.stats]
-        stats.append(copy.deepcopy(new_state[probe.target]))
-        new_state[probe.stats] = stats
+    def step(probe, state):
+        stats = state[probe.stats.delayed()]
+        stats.append(copy.deepcopy(state[probe.target]))
+        state[probe.stats] = stats
 
     @staticmethod
     def probe(probe, state):

@@ -81,9 +81,9 @@ class ObjectAPISmokeTests(unittest.TestCase):
     def test_schedule_cycle_with_filter(self):
         net = Network()
         ens1 = net.add(LIFNeurons(13))
-        filter = net.add(Filter(ens1.output))
-        conn = net.add(Connection(filter.output, ens1.input_current))
-        net.add(Probe(filter.output))
+        filt = net.add(Filter(ens1.output.delayed()))
+        conn = net.add(Connection(filt.output, ens1.input_current))
+        net.add(Probe(filt.output))
         sim = self.Simulator(net, dt=0.001, verbosity=1)
         results = sim.run(.1)
 
@@ -101,6 +101,17 @@ class ObjectAPISmokeTests(unittest.TestCase):
         # -- this is not the right way to check because array equality
         #    is ambiguous
         #assert results == results2
+
+    def test_fan_in(self):
+        net = Network()
+        ens1 = net.add(LIFNeurons(1))
+        ens2 = net.add(LIFNeurons(2))
+        ens3 = net.add(LIFNeurons(3))
+        conn = net.add(Connection(ens1.output, ens3.input_current))
+        conn = net.add(Connection(ens2.output, ens3.input_current))
+
+        nose.tools.assert_raises(API.MultipleSourceError,
+            self.Simulator, net, dt=0.001, verbosity=0)
 
     def test_learning(self):
         net = Network()
