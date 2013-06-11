@@ -15,7 +15,7 @@ class Direct(object):
     """
     def __init__(self, n_in, n_out, fn, name=None):
         """
-        fn: 
+        fn:
         """
         if name is None:
             self.input_signal = Signal(n_in)
@@ -85,6 +85,8 @@ class LIF(object):
         :param float array intercepts: x-intercepts of neurons
 
         """
+        max_rates = np.asarray(max_rates)
+        intercepts = np.asarray(intercepts)
         x = 1.0 / (1 - np.exp(
             (self.tau_ref - (1.0 / max_rates)) / self.tau_rc))
         self.gain = (1 - x) / (intercepts - 1.0)
@@ -170,6 +172,3 @@ class LIFRate(LIF):
     @property
     def n_out(self):
         return self.n_neurons
-
-
-
