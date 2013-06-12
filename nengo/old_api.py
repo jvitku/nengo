@@ -652,11 +652,9 @@ class Network(object):
 
     def make_input(self, name, value):
         if callable(value):
-            rval = self.model.signal()
             pop = self.model.nonlinearity(
                 Direct(n_in=1, n_out=1, fn=value))
             self.model.encoder(self.simtime, pop, weights=np.asarray([[1]]))
-            self.inputs[name] = pop.output_signal
             # TODO: add this to simulator_objects
             pop.input_signal.name = name + '.input'
             pop.bias_signal.name = name + '.bias'
@@ -719,7 +717,7 @@ class Network(object):
             transform = compute_transform(dim_pre=dim_pre,
                 dim_post=dst.dimensions, array_size=dst.array_size, **kwargs)
             #TODO: move this into the compute transform jesus
-            transform.shape = (len(decoded_origin.sigs), decoded_origin.sigs[0].size, 
+            transform.shape = (len(decoded_origin.sigs), decoded_origin.sigs[0].size,
                 dst.array_size, dst.dimensions)
 
             if pstc > self.dt:
