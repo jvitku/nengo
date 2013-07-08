@@ -4,9 +4,8 @@ import random
 import warnings
 
 from . import logger
-from .model_objects import Uniform, Gaussian
-from .model_objects import Ensemble, Network, Node, Connection
-from .simulator_objects import SimModel
+from .model_objects import *
+from .sim import SimModel
 
 
 class Model(SimModel):

@@ -4,7 +4,7 @@ import warnings
 import numpy as np
 
 from . import nonlinear as nl
-from . import simulator_objects as so
+from . import sim
 
 
 class Uniform(object):
@@ -17,6 +17,7 @@ class Uniform(object):
 
     def sample(self, n):
         return [random.uniform(self.low, self.high) for _ in xrange(n)]
+
 
 class Gaussian(object):
     def __init__(self, mean, std):
@@ -149,14 +150,14 @@ class Ensemble(object):
         #  self.enc - the encoders that map the signal into the population
 
         # Set up the signal
-        self.sig = so.Signal(n=dimensions)
+        self.sig = sim.Signal(n=dimensions)
 
         # Set up the neurons
         neurons.set_gain_bias(max_rates, intercepts)
         self.nl = neurons
 
         # Set up the encoders
-        self.enc = so.Encoder(self.sig, self.nl, encoders)
+        self.enc = sim.Encoder(self.sig, self.nl, encoders)
 
     def __str__(self):
         return ("Ensemble (id " + str(id(self)) + "): \n"
@@ -223,17 +224,17 @@ class Node(object):
         self.name = name
         if callable(output):
             self.nl = nl.Direct(n_in=1, n_out=1, fn=output)
-            self.enc = so.Encoder(input, self.nl, weights=np.asarray([[1]]))
+            self.enc = sim.Encoder(input, self.nl, weights=np.asarray([[1]]))
             self.nl.input_signal.name = name + '.input'
             self.nl.bias_signal.name = name + '.bias'
             self.nl.output_signal.name = name + '.output'
             self.sig = self.nl.output_signal
         else:
             if type(output) == list:
-                self.sig = so.Constant(n=len(output),
+                self.sig = sim.Constant(n=len(output),
                                        value=[float(n) for n in output])
             else:
-                self.sig = so.Constant(n=1, value=float(output))
+                self.sig = sim.Constant(n=1, value=float(output))
 
     def __str__(self):
         if hasattr(self, 'nl'):
@@ -331,15 +332,15 @@ class Connection(object):
         self.post = post
 
         if isinstance(self.pre, Ensemble):
-            self.decoder = so.Decoder(self.pre.nl, self.pre.sig)
+            self.decoder = sim.Decoder(self.pre.nl, self.pre.sig)
             self.decoder.desired_function = function
-            self.transform = so.Transform(np.asarray(transform),
+            self.transform = sim.Transform(np.asarray(transform),
                                           self.pre.sig,
                                           self.post.sig)
 
         elif isinstance(self.pre, Node):
             if function is None:
-                self.transform = so.Transform(np.asarray(transform),
+                self.transform = sim.Transform(np.asarray(transform),
                                               self.pre.sig,
                                               self.post.sig)
             else:
